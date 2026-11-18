@@ -52,25 +52,33 @@ describe('power grid, overclocking, and tech progression', () => {
     config.free_build.value = 1;
     const world = createWorld(301);
 
-    // Hub supplies 15 MW; place 5 active smelters + constructors totaling 30 MW demand -> eta ~= 0.5
-    // Actually let's place 10 smelters (3 MW each = 30 MW) active simultaneously -> 15 / 30 = 0.5 satisfaction
-    const smelters = [];
-    for (let i = 0; i < 10; i++) {
-      const s = placeBuilding(world, 'smelter', 10 + i, 10, 0, config, {
-        recipeId: 'smelt_iron',
-      }).entity!;
-      s.inputBuffer.iron_ore = 5;
-      smelters.push(s);
+    // Ensure clean terrain without geothermal resonance around test row
+    for (let y = 9; y <= 11; y++) {
+      for (let x = 9; x <= 20; x++) {
+        if (world.resources[tileIndex(x, y)] === 'geothermal_vent') {
+          world.resources[tileIndex(x, y)] = 'none';
+        }
+      }
     }
 
-    // Run 30 ticks (1.5s wall time): at full power (eta=1), 1.5s completes 1 ingot; at eta=0.5, progress should be ~0.5
-    for (let t = 0; t < 30; t++) {
+    // Hub supplies 20 MW; place 10 active constructors (4 MW each = 40 MW) -> 20 / 40 = 0.5 satisfaction
+    const constructors = [];
+    for (let i = 0; i < 10; i++) {
+      const c = placeBuilding(world, 'constructor', 10 + i, 10, 0, config, {
+        recipeId: 'press_plate',
+      }).entity!;
+      c.inputBuffer.iron_ingot = 5;
+      constructors.push(c);
+    }
+
+    // Run 20 ticks (1.0s wall time): at full power (eta=1), 1.0s completes 1 plate; at eta=0.5, progress should be ~0.5
+    for (let t = 0; t < 20; t++) {
       tickWorld(world, config);
     }
 
     expect(world.power.satisfaction).toBeCloseTo(0.5, 2);
-    expect(smelters[0].outputBuffer).toBeNull();
-    expect(smelters[0].craftProgress).toBeCloseTo(0.5, 1);
+    expect(constructors[0].outputBuffer).toBeNull();
+    expect(constructors[0].craftProgress).toBeCloseTo(0.5, 1);
   });
 
   it('charges accumulators in daylight and discharges cleanly during night', () => {
@@ -79,7 +87,7 @@ describe('power grid, overclocking, and tech progression', () => {
     const world = createWorld(302);
     world.unlockedTechs = ['tier_1_logistics', 'tier_2_metallurgy', 'tier_3_electronics'];
 
-    // 4 Solar panels (+32 MW peak at midday) + 1 Accumulator (120 MJ) + Hub (15 MW)
+    // 4 Solar panels (+56 MW peak at midday) + 1 Accumulator (180 MJ) + Hub (20 MW)
     for (let i = 0; i < 4; i++) placeBuilding(world, 'solar_panel', 10 + i, 10, 0, config);
     const acc = placeBuilding(world, 'accumulator', 14, 10, 0, config).entity!;
 
@@ -89,7 +97,7 @@ describe('power grid, overclocking, and tech progression', () => {
     for (let i = 0; i < 20; i++) stepPower(world, config, 0.5); // 10 seconds charge
     expect(acc.energyMj).toBeGreaterThan(80);
 
-    // Switch to night (solar = 0) with 25 MW load (Hub gives 15 MW, deficit = 10 MW -> accumulator fills gap)
+    // Switch to night (solar = 0) with 24 MW load (Hub gives 20 MW, deficit = 4 MW -> accumulator fills gap)
     world.dayTime = 0.85;
     expect(computeSolarFactor(world.dayTime)).toBe(0);
     for (let i = 0; i < 8; i++) {
