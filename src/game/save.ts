@@ -2,6 +2,7 @@ import { BUILDINGS, HUB_ORIGIN, ITEMS, RECIPES, TECHS, WORLD_SIZE } from '../cor
 import type { BuildingEntity, BuildingId, Direction, ItemId, WorldState } from '../core/types';
 import { TELEMETRY_BUCKETS, createTelemetryState, isHubTile } from './world';
 
+// shortcut: single localStorage autosave slot (~4 MB browser quota), migrate to IndexedDB multi-slot if saves exceed 2 MB
 export const SAVE_KEY = 'aetherforge_save_v1';
 export const SAVE_VERSION = 1;
 

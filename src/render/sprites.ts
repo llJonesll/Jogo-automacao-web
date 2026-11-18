@@ -720,6 +720,34 @@ export function getBuildingIconDataUrl(
   return url;
 }
 
+function drawWrappedLabel(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number
+): void {
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let cur = '';
+  for (const w of words) {
+    const test = cur ? `${cur} ${w}` : w;
+    if (ctx.measureText(test).width <= maxWidth) {
+      cur = test;
+    } else {
+      if (cur) lines.push(cur);
+      cur = w;
+    }
+  }
+  if (cur) lines.push(cur);
+
+  const lineH = 16;
+  const startY = lines.length > 1 ? y - 6 : y;
+  for (let i = 0; i < Math.min(2, lines.length); i++) {
+    ctx.fillText(lines[i], x, startY + i * lineH);
+  }
+}
+
 /**
  * Renders the Game Studio `?scene=figures` catalog screen showing every item and
  * every building silhouette side-by-side with clear labels and zero emojis.
@@ -738,55 +766,55 @@ export function renderFiguresGallery(
   ctx.fillStyle = '#f59e0b';
   ctx.font = 'bold 20px "Segoe UI", system-ui, sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillText('AETHERFORGE — Procedural Asset & Silhouette Catalog (Zero Emoji)', 28, 36);
+  ctx.fillText('AETHERFORGE — Procedural Asset & Silhouette Catalog (Zero Emoji)', 24, 34);
+
+  const cols = Math.max(3, Math.floor((width - 48) / 210));
+  const cellW = Math.floor((width - 48) / cols);
+  const cellH = 66;
 
   // Section 1: Items (19)
   ctx.fillStyle = '#94a3b8';
   ctx.font = 'bold 14px "Segoe UI", system-ui, sans-serif';
-  ctx.fillText(`ITEMS (${ITEM_IDS.length})`, 28, 66);
-
-  const cols = Math.max(4, Math.floor((width - 56) / 140));
-  const cellW = 136;
-  const cellH = 74;
+  ctx.fillText(`ITEMS (${ITEM_IDS.length})`, 24, 62);
 
   ITEM_IDS.forEach((item, i) => {
     const col = i % cols;
     const row = Math.floor(i / cols);
-    const x = 28 + col * cellW;
-    const y = 80 + row * cellH;
+    const x = 24 + col * cellW;
+    const y = 74 + row * cellH;
     ctx.fillStyle = '#111827';
     ctx.strokeStyle = '#1e293b';
     ctx.fillRect(x, y, cellW - 8, cellH - 8);
     ctx.strokeRect(x, y, cellW - 8, cellH - 8);
-    drawItemIcon(ctx, item, x + 28, y + 32, 34);
+    drawItemIcon(ctx, item, x + 26, y + 29, 32);
     ctx.fillStyle = '#e2e8f0';
     ctx.font = '14px "Segoe UI", system-ui, sans-serif';
-    ctx.fillText(t.items[item].slice(0, 11), x + 50, y + 37);
+    drawWrappedLabel(ctx, t.items[item], x + 50, y + 33, cellW - 64);
   });
 
   const itemRows = Math.ceil(ITEM_IDS.length / cols);
-  const bStartY = 100 + itemRows * cellH;
+  const bStartY = 94 + itemRows * cellH;
 
   ctx.fillStyle = '#94a3b8';
   ctx.font = 'bold 14px "Segoe UI", system-ui, sans-serif';
-  ctx.fillText(`BUILDINGS (${BUILDING_IDS.length})`, 28, bStartY);
+  ctx.fillText(`BUILDINGS (${BUILDING_IDS.length})`, 24, bStartY);
 
   BUILDING_IDS.forEach((bType, i) => {
     const col = i % cols;
     const row = Math.floor(i / cols);
-    const x = 28 + col * cellW;
-    const y = bStartY + 14 + row * cellH;
+    const x = 24 + col * cellW;
+    const y = bStartY + 12 + row * cellH;
     ctx.fillStyle = '#111827';
     ctx.strokeStyle = '#1e293b';
     ctx.fillRect(x, y, cellW - 8, cellH - 8);
     ctx.strokeRect(x, y, cellW - 8, cellH - 8);
-    drawBuildingGlyph(ctx, bType, 1, x + 8, y + 12, 42, timeSec, {
+    drawBuildingGlyph(ctx, bType, 1, x + 8, y + 9, 40, timeSec, {
       active: true,
       status: 'working',
       energyRatio: 0.8,
     });
     ctx.fillStyle = '#e2e8f0';
     ctx.font = '14px "Segoe UI", system-ui, sans-serif';
-    ctx.fillText(t.buildings[bType].name.slice(0, 11), x + 54, y + 38);
+    drawWrappedLabel(ctx, t.buildings[bType].name, x + 54, y + 33, cellW - 68);
   });
 }

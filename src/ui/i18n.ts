@@ -90,6 +90,7 @@ export interface LocalizationBundle {
   recipes: Record<string, string>;
   techs: Record<string, { name: string; desc: string }>;
   phases: Record<string, string>;
+  tweak_descs: Record<string, string>;
 }
 
 const PT_BR: LocalizationBundle = {
@@ -258,6 +259,15 @@ const PT_BR: LocalizationBundle = {
     phase_4: 'Fase 4: Telemetria de Silício',
     phase_5: 'Fase 5: Núcleo de Propulsão Quântica',
   },
+  tweak_descs: {
+    seed: 'Semente determinística para geração de jazidas e fissuras geotérmicas',
+    mining_speed_mult: 'Multiplicador global de velocidade dos Extratores Mk.I e Mk.II',
+    belt_speed_mult: 'Multiplicador global das Esteiras, Túneis, Divisores e Junções',
+    craft_speed_mult: 'Multiplicador global de fabricação nas máquinas industriais',
+    power_output_mult: 'Multiplicador global de geração de energia (RTG, Carvão, Solar, Geotérmica)',
+    day_cycle_seconds: 'Duração completa do ciclo dia/noite em segundos de simulação',
+    free_build: 'Modo Sandbox (1 = construir livremente sem custo de estoque ou bloqueio de Tech)',
+  },
 };
 
 const EN: LocalizationBundle = {
@@ -425,6 +435,15 @@ const EN: LocalizationBundle = {
     phase_3: 'Phase 3: Structural Matrix',
     phase_4: 'Phase 4: Silicon Telemetry',
     phase_5: 'Phase 5: Quantum Propulsion Core',
+  },
+  tweak_descs: {
+    seed: 'Deterministic PRNG seed for exoplanet vein and geothermal rift generation',
+    mining_speed_mult: 'Global extraction speed multiplier for Mk.I and Mk.II miners',
+    belt_speed_mult: 'Global speed multiplier for belts, underground tunnels, splitters, and mergers',
+    craft_speed_mult: 'Global crafting speed multiplier for smelters, constructors, foundries, and assemblers',
+    power_output_mult: 'Global power generation multiplier for RTG, coal, solar, and geothermal plants',
+    day_cycle_seconds: 'Full planet day/night rotation duration in simulation seconds',
+    free_build: 'Sandbox toggle (1 = construct buildings without stockpile cost or tech locks)',
   },
 };
 

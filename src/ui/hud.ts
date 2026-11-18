@@ -933,7 +933,7 @@ export class FactoryHud {
         const valSpan = el('span', 'badge-ok', String(knob.value));
         top.append(lbl, valSpan);
 
-        const desc = el('div', 'muted-note', knob.description);
+        const desc = el('div', 'muted-note', t.tweak_descs[key] ?? knob.description);
         const slider = el('input', 'field-range');
         slider.type = 'range';
         slider.min = String(knob.min);

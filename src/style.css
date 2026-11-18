@@ -287,6 +287,7 @@ textarea {
   left: 50%;
   bottom: 10px;
   transform: translateX(-50%);
+  width: max-content;
   max-width: 96vw;
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
@@ -308,16 +309,17 @@ textarea {
 
 .hotbar-slots {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 5px;
-  overflow-x: auto;
   padding-bottom: 2px;
 }
 
 .hotbar-slot {
   position: relative;
-  min-width: 64px;
-  max-width: 72px;
-  padding: 5px 4px;
+  min-width: 72px;
+  max-width: 92px;
+  padding: 5px 5px;
   background: #0f172a;
   border: 1px solid #334155;
   border-radius: 7px;
@@ -325,6 +327,7 @@ textarea {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 3px;
   cursor: pointer;
 }
@@ -344,17 +347,15 @@ textarea {
 }
 
 .slot-icon {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
 }
 
 .slot-name {
   font-size: 10px;
-  line-height: 1.1;
+  line-height: 1.12;
   text-align: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-break: break-word;
   max-width: 100%;
 }
 

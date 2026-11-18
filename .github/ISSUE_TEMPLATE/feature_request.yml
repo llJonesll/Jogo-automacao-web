@@ -1,0 +1,17 @@
+name: Feature Request
+description: Propose a new machine, logistics tool, recipe, or QoL improvement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Proposal Summary
+      description: Describe the gameplay or engineering improvement.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Balance & Simulation Fit
+      description: How does it interact with existing power, belts, or Orbital Phases?

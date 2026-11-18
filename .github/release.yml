@@ -1,0 +1,21 @@
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+  categories:
+    - title: Features & Gameplay
+      labels:
+        - feat
+        - enhancement
+    - title: Bug Fixes
+      labels:
+        - bug
+        - fix
+    - title: Engineering & Studio Governance
+      labels:
+        - governance
+        - ci
+        - docs
+    - title: Other Changes
+      labels:
+        - "*"

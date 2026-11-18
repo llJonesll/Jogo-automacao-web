@@ -120,7 +120,7 @@ export class SoundEngine {
     const bufferSize = Math.floor(this.ctx.sampleRate * dur);
     const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
     const data = buffer.getChannelData(0);
-    // shortcut: deterministic noise ramp in audio synthesis avoids PRNG coupling
+    // shortcut: LCG noise buffer capped at 1.6s launch SFX, move to AudioWorklet if continuous procedural music is added
     for (let i = 0; i < bufferSize; i++) {
       data[i] = (((i * 16807) % 2147483647) / 1073741824 - 1) * 0.7;
     }

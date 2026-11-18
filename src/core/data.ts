@@ -15,6 +15,7 @@ import type {
   TechDef,
 } from './types';
 
+// shortcut: fixed 64x64 flat grid (4096 tiles), switch to sparse chunk map if world exceeds 128x128
 export const WORLD_SIZE = 64;
 export const HUB_ORIGIN = 31;
 export const HUB_SIZE = 3;
