@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aetherforge.local/schemas/factory_techs.schema.json",
+  "title": "AETHERFORGE Tech Tree and Orbital Phases",
+  "description": "Schema for data/factory_techs.json defining technology tiers and orbital elevator cargo phases.",
+  "type": "object",
+  "required": ["techs", "orbital_phases"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "techs": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/tech_def" }
+    },
+    "orbital_phases": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/orbital_phase_def" }
+    }
+  },
+  "$defs": {
+    "item_stack": {
+      "type": "object",
+      "required": ["item", "count"],
+      "additionalProperties": false,
+      "properties": {
+        "item": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+        "count": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "tech_def": {
+      "type": "object",
+      "required": [
+        "id",
+        "tier",
+        "prerequisites",
+        "cost",
+        "unlocks_buildings",
+        "unlocks_features"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+        "tier": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "prerequisites": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z0-9_]+$" }
+        },
+        "cost": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/item_stack" }
+        },
+        "unlocks_buildings": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z0-9_]+$" }
+        },
+        "unlocks_features": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["blueprints", "overclock", "quantum_recipes", "orbital_overdrive"]
+          }
+        },
+        "unlocks_recipes": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z0-9_]+$" }
+        }
+      }
+    },
+    "orbital_phase_def": {
+      "type": "object",
+      "required": ["phase", "id", "requirements"],
+      "additionalProperties": false,
+      "properties": {
+        "phase": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+        "requirements": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/item_stack" }
+        }
+      }
+    }
+  }
+}

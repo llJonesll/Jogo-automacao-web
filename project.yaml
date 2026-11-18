@@ -15,7 +15,23 @@ modes:
   workflow: "standard"
   automation: "autonomous"
 
+workflow_overrides:
+  tuning_knobs: true
+
+performance:
+  target_framerate: 60
+  frame_budget_ms: 16.67
+  tick_budget_ms: 2.0
+  draw_call_limit: 1500
+  memory_ceiling_mb: 128
+
 platform:
+  targets: ["Web"]
+  primary_input: "keyboard_mouse"
+  gamepad_support: "Full"
+  touch_support: "Partial"
+  multiplayer: false
+  online: false
   cert_tier: "none"
 
 naming:

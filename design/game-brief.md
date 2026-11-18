@@ -1,3 +1,5 @@
+> **Status: Superseded** — Replaced by [design/gdd/game-concept.md](./gdd/game-concept.md) and [design/gdd/systems-index.md](./gdd/systems-index.md) at Standard rigor. Retained below for historical reference.
+
 # Game Brief — AETHERFORGE: Orbital Foundry
 
 - **Genre**: Top-Down 2.5D Factory Automation & Logistics Sandbox
