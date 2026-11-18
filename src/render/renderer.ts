@@ -2,6 +2,7 @@ import {
   BUILDINGS,
   DIR_DX,
   DIR_DY,
+  DT,
   HUB_ORIGIN,
   HUB_SIZE,
   ITEMS,
@@ -9,6 +10,7 @@ import {
   WORLD_SIZE,
   isBeltType,
   isProcessorType,
+  oppositeDir,
 } from '../core/data';
 import type {
   BlueprintData,
@@ -20,9 +22,24 @@ import type {
   WorldState,
 } from '../core/types';
 import { getBuildingAt, inBounds, isHubTile, tileIndex } from '../game/world';
-import { drawBuildingGlyph, drawItemIcon, statusColor } from './sprites';
+import {
+  PARTICLE_COLOR_INDEX,
+  type ParticleBurstKind,
+  ParticlePool,
+} from './particles';
+import {
+  type BuildingGlyphOptions,
+  type ColorblindMode,
+  drawBuildingGlyph,
+  drawItemFromAtlas,
+  drawItemIcon,
+  statusColor,
+} from './sprites';
 
 export const BASE_TILE_PX = 48;
+
+export type { ColorblindMode } from './sprites';
+export type { ParticleBurstKind } from './particles';
 
 export interface CameraState {
   x: number; // world center in tile coordinates
@@ -32,7 +49,7 @@ export interface CameraState {
 
 export interface RenderOptions {
   showAltMode: boolean;
-  showPowerOverlay: boolean;
+  showPowerOverlay?: boolean;
   colorblind: boolean;
   selectedTool: BuildingId | 'cursor' | 'mine' | 'deconstruct' | 'bp_copy' | 'bp_stamp';
   toolDir: Direction;
@@ -42,19 +59,274 @@ export interface RenderOptions {
   copyStart: { x: number; y: number } | null;
   selectedBuildingId: number | null;
   mineBeam: { tx: number; ty: number; timer: number } | null;
+  simAlpha?: number;
+  reducedMotion?: boolean;
+  colorblindMode?: ColorblindMode;
+  uiScale?: number;
 }
 
-const ORE_PALETTE: Record<Exclude<ResourceType, 'none'>, { base: string; fleck: string }> = {
-  iron_ore: { base: '#273a4f', fleck: '#7ea8d6' },
-  copper_ore: { base: '#4a2617', fleck: '#eb7d44' },
-  coal: { base: '#14171c', fleck: '#4b5563' },
-  stone: { base: '#373a40', fleck: '#9ca3af' },
-  quartz: { base: '#3b1e54', fleck: '#d8b4fe' },
-  geothermal_vent: { base: '#451208', fleck: '#fb923c' },
+interface OreColors {
+  base: string;
+  fleck: string;
+  rgb: readonly [number, number, number];
+}
+
+const ORE_PALETTE: Record<Exclude<ResourceType, 'none'>, OreColors> = {
+  iron_ore: { base: '#273a4f', fleck: '#7ea8d6', rgb: [126, 168, 214] },
+  copper_ore: { base: '#4a2617', fleck: '#eb7d44', rgb: [235, 125, 68] },
+  coal: { base: '#14171c', fleck: '#4b5563', rgb: [75, 85, 99] },
+  stone: { base: '#373a40', fleck: '#9ca3af', rgb: [156, 163, 175] },
+  quartz: { base: '#3b1e54', fleck: '#d8b4fe', rgb: [216, 180, 254] },
+  geothermal_vent: { base: '#451208', fleck: '#fb923c', rgb: [251, 146, 60] },
+};
+
+const ORE_PALETTE_CB: Record<Exclude<ResourceType, 'none'>, OreColors> = {
+  iron_ore: { base: '#1e3a5f', fleck: '#60a5fa', rgb: [96, 165, 250] },
+  copper_ore: { base: '#572808', fleck: '#fb923c', rgb: [251, 146, 60] },
+  coal: { base: '#14171c', fleck: '#64748b', rgb: [100, 116, 139] },
+  stone: { base: '#373a40', fleck: '#cbd5e1', rgb: [203, 213, 225] },
+  quartz: { base: '#4c1d95', fleck: '#f0abfc', rgb: [240, 171, 252] },
+  geothermal_vent: { base: '#500724', fleck: '#fb7185', rgb: [251, 113, 133] },
+};
+
+const TUNNEL_DASH: number[] = [5, 4];
+const POWER_DASH: number[] = [4, 4];
+const GLOW_TEX_SIZE = 128;
+
+// Pre-cached clock percentage strings & font strings (zero per-frame string churn)
+const CLOCK_LABELS = new Map<number, string>();
+for (let pct = 50; pct <= 250; pct += 5) {
+  CLOCK_LABELS.set(pct, `${pct}%`);
+}
+const FONT_CACHE = new Map<number, string>();
+const POWER_TEXT_CACHE = new Map<number, string>();
+
+function getClockLabel(clock: number): string {
+  const pct = Math.round(clock * 100);
+  let label = CLOCK_LABELS.get(pct);
+  if (!label) {
+    label = `${pct}%`;
+    CLOCK_LABELS.set(pct, label);
+  }
+  return label;
+}
+
+function getMonoFont(px: number): string {
+  let font = FONT_CACHE.get(px);
+  if (!font) {
+    font = `bold ${px}px monospace`;
+    FONT_CACHE.set(px, font);
+  }
+  return font;
+}
+
+function getPowerLabel(mw: number, isGen: boolean): string {
+  const tenths = Math.round(mw * 10);
+  const key = isGen ? tenths + 100000 : tenths;
+  let label = POWER_TEXT_CACHE.get(key);
+  if (!label) {
+    label = `${isGen ? '+' : ''}${(tenths / 10).toFixed(1)}MW`;
+    POWER_TEXT_CACHE.set(key, label);
+  }
+  return label;
+}
+
+function effectiveCbMode(opts: RenderOptions): ColorblindMode {
+  if (opts.colorblindMode && opts.colorblindMode !== 'none') return opts.colorblindMode;
+  return opts.colorblind ? 'deuteranopia' : 'none';
+}
+
+function oreParticleColorIdx(res: ResourceType): number {
+  switch (res) {
+    case 'iron_ore':
+      return PARTICLE_COLOR_INDEX.iron_ore;
+    case 'copper_ore':
+      return PARTICLE_COLOR_INDEX.copper_ore;
+    case 'coal':
+      return PARTICLE_COLOR_INDEX.coal;
+    case 'stone':
+      return PARTICLE_COLOR_INDEX.stone;
+    case 'quartz':
+      return PARTICLE_COLOR_INDEX.quartz;
+    default:
+      return PARTICLE_COLOR_INDEX.amber;
+  }
+}
+
+function drawOreDepositShapes(
+  ctx: CanvasRenderingContext2D,
+  res: Exclude<ResourceType, 'none'>,
+  px: number,
+  py: number,
+  tilePx: number,
+  pal: OreColors,
+  x: number,
+  y: number
+): void {
+  ctx.fillStyle = pal.base;
+  ctx.fillRect(px + 1, py + 1, tilePx - 2, tilePx - 2);
+
+  if (res === 'geothermal_vent') {
+    // Static dark basalt crater; pulsing glow ring is rendered per frame
+    const cx = px + tilePx * 0.5;
+    const cy = py + tilePx * 0.5;
+    ctx.fillStyle = '#1c0a04';
+    ctx.beginPath();
+    ctx.arc(cx, cy, tilePx * 0.36, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#7c2d12';
+    ctx.lineWidth = Math.max(1, tilePx * 0.05);
+    ctx.stroke();
+    return;
+  }
+
+  ctx.fillStyle = pal.fleck;
+  const h = ((x * 73856093) ^ (y * 19349663)) >>> 0;
+  for (let k = 0; k < 4; k++) {
+    const ox = ((h >> (k * 4)) & 7) / 10 + 0.15;
+    const oy = ((h >> (k * 4 + 2)) & 7) / 10 + 0.15;
+    const cx = px + ox * tilePx * 0.75 + tilePx * 0.07;
+    const cy = py + oy * tilePx * 0.75 + tilePx * 0.07;
+    const s = tilePx * 0.14;
+
+    if (res === 'iron_ore') {
+      // Angular diamond shards
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - s * 0.65);
+      ctx.lineTo(cx + s * 0.65, cy);
+      ctx.lineTo(cx, cy + s * 0.65);
+      ctx.lineTo(cx - s * 0.65, cy);
+      ctx.closePath();
+      ctx.fill();
+    } else if (res === 'copper_ore') {
+      // Faceted triangular nuggets
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - s * 0.65);
+      ctx.lineTo(cx + s * 0.65, cy + s * 0.55);
+      ctx.lineTo(cx - s * 0.65, cy + s * 0.55);
+      ctx.closePath();
+      ctx.fill();
+    } else if (res === 'coal') {
+      // Rounded anthracite lumps
+      ctx.beginPath();
+      ctx.arc(cx, cy, s * 0.55, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (res === 'quartz') {
+      // Elongated crystal prism needles
+      ctx.beginPath();
+      ctx.moveTo(cx - s * 0.35, cy - s * 0.8);
+      ctx.lineTo(cx + s * 0.35, cy - s * 0.45);
+      ctx.lineTo(cx + s * 0.35, cy + s * 0.8);
+      ctx.lineTo(cx - s * 0.35, cy + s * 0.45);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      // Stratified stone slabs
+      ctx.fillRect(cx - s * 0.65, cy - s * 0.38, s * 1.3, s * 0.76);
+    }
+  }
+}
+
+function isFeederFromSide(
+  world: WorldState,
+  b: BuildingEntity,
+  sideDir: Direction
+): boolean {
+  const nx = b.x + DIR_DX[sideDir];
+  const ny = b.y + DIR_DY[sideDir];
+  if (!inBounds(nx, ny)) return false;
+  const nb = getBuildingAt(world, nx, ny);
+  if (!nb) return false;
+  if (nb.type === 'splitter') return true;
+  const targetDir = oppositeDir(sideDir);
+  if (nb.dir !== targetDir) return false;
+  return (
+    isBeltType(nb.type) ||
+    nb.type === 'merger' ||
+    (nb.type === 'tunnel' && nb.tunnelMode === 'exit') ||
+    nb.type === 'miner_mk1' ||
+    nb.type === 'miner_mk2' ||
+    isProcessorType(nb.type)
+  );
+}
+
+function detectBeltEntryDir(world: WorldState, b: BuildingEntity): Direction | undefined {
+  const backDir = oppositeDir(b.dir);
+  if (isFeederFromSide(world, b, backDir)) return undefined;
+  const leftDir = ((b.dir + 3) & 3) as Direction;
+  const rightDir = ((b.dir + 1) & 3) as Direction;
+  const fromLeft = isFeederFromSide(world, b, leftDir);
+  const fromRight = isFeederFromSide(world, b, rightDir);
+  if (fromLeft && !fromRight) return leftDir;
+  if (fromRight && !fromLeft) return rightDir;
+  return undefined;
+}
+
+// Reusable scratch buffers to eliminate hot-loop heap allocations
+const scratchPos = { x: 0, y: 0 };
+const reusableGlyphOpts: BuildingGlyphOptions = {
+  active: false,
+  status: 'idle',
+  energyRatio: 0,
+  tunnelMode: undefined,
+  colorblind: 'none',
+  geoBonus: 0,
+  entryDir: undefined,
+  reducedMotion: false,
 };
 
 export class FactoryRenderer {
   private minimapBounds = { x: 0, y: 0, w: 144, h: 144 };
+  public readonly particles = new ParticlePool();
+
+  // Cached offscreen terrain canvas (rebuilt only when world.seed / cbMode / size changes)
+  private terrainCanvas: HTMLCanvasElement | null = null;
+  private cachedTerrainSeed = Number.NaN;
+  private cachedTerrainSize = -1;
+  private cachedTerrainCb: ColorblindMode = 'none';
+  private cachedVentTiles: number[] = [];
+
+  // Cached 64x64 offscreen minimap canvas + pixel buffer
+  private minimapCanvas: HTMLCanvasElement | null = null;
+  private minimapCtx: CanvasRenderingContext2D | null = null;
+  private minimapImgData: ImageData | null = null;
+  private lastMinimapSeed = Number.NaN;
+  private lastMinimapCb: ColorblindMode = 'none';
+  private lastMinimapBuildingCount = -1;
+  private lastMinimapTimeSec = -999;
+
+  // Pre-baked radial glow sprites (cyan, orange, indigo)
+  private glowCyan: HTMLCanvasElement | null = null;
+  private glowOrange: HTMLCanvasElement | null = null;
+  private glowIndigo: HTMLCanvasElement | null = null;
+
+  // Timing & emission state
+  private lastRenderTimeSec = -1;
+  private prevRocketTimer = 0;
+  private fxRngState = 0x9e3779b9;
+
+  public dispose(): void {
+    this.terrainCanvas = null;
+    this.cachedTerrainSeed = Number.NaN;
+    this.cachedVentTiles.length = 0;
+    this.minimapCanvas = null;
+    this.minimapCtx = null;
+    this.minimapImgData = null;
+    this.lastMinimapSeed = Number.NaN;
+    this.glowCyan = null;
+    this.glowOrange = null;
+    this.glowIndigo = null;
+    this.particles.clear();
+  }
+
+  public spawnBurst(worldX: number, worldY: number, kind: ParticleBurstKind): void {
+    this.particles.spawnBurst(worldX, worldY, kind);
+  }
+
+  private nextFxRand(): number {
+    this.fxRngState = (Math.imul(this.fxRngState, 1664525) + 1013904223) >>> 0;
+    return this.fxRngState / 4294967296;
+  }
 
   public screenToTile(
     sx: number,
@@ -86,6 +358,18 @@ export class FactoryRenderer {
     timeSec: number,
     opts: RenderOptions
   ): void {
+    const dt =
+      this.lastRenderTimeSec < 0
+        ? 0
+        : Math.max(0, Math.min(0.05, timeSec - this.lastRenderTimeSec));
+    this.lastRenderTimeSec = timeSec;
+
+    const cbMode = effectiveCbMode(opts);
+    const reducedMotion = Boolean(opts.reducedMotion);
+    const simAlpha = reducedMotion ? 0 : Math.max(0, Math.min(1, opts.simAlpha ?? 0));
+
+    this.particles.update(dt, reducedMotion);
+
     ctx.fillStyle = '#090d16';
     ctx.fillRect(0, 0, viewW, viewH);
 
@@ -94,40 +378,110 @@ export class FactoryRenderer {
     const offsetY = viewH * 0.5 - cam.y * tilePx;
 
     const minX = Math.max(0, Math.floor(-offsetX / tilePx) - 1);
-    const maxX = Math.min(WORLD_SIZE - 1, Math.ceil((viewW - offsetX) / tilePx) + 1);
+    const maxX = Math.min(world.size - 1, Math.ceil((viewW - offsetX) / tilePx) + 1);
     const minY = Math.max(0, Math.floor(-offsetY / tilePx) - 1);
-    const maxY = Math.min(WORLD_SIZE - 1, Math.ceil((viewH - offsetY) / tilePx) + 1);
+    const maxY = Math.min(world.size - 1, Math.ceil((viewH - offsetY) / tilePx) + 1);
 
     ctx.save();
     ctx.translate(offsetX, offsetY);
 
-    // 1. Planet basalt terrain & resource veins
-    this.drawTerrain(ctx, world, minX, maxX, minY, maxY, tilePx, timeSec);
+    // 1. Planet basalt terrain & resource veins (offscreen cached + animated vents)
+    this.drawTerrain(ctx, world, minX, maxX, minY, maxY, tilePx, timeSec, dt, cbMode, reducedMotion);
 
     // 2. Buildings (excluding items riding on belts)
-    this.drawBuildings(ctx, world, minX, maxX, minY, maxY, tilePx, timeSec, opts);
+    this.drawBuildings(ctx, world, minX, maxX, minY, maxY, tilePx, timeSec, dt, opts, cbMode, reducedMotion);
 
     // 3. Orbital Hub (3x3 centerpiece + Rocket launch VFX)
-    this.drawOrbitalHub(ctx, world, tilePx, timeSec);
+    this.drawOrbitalHub(ctx, world, tilePx, timeSec, dt, reducedMotion);
 
-    // 4. Belt items & Inserter carried items (drawn on top of tracks)
-    this.drawItemsAndInserterArms(ctx, world, minX, maxX, minY, maxY, tilePx, opts);
+    // 4. Belt items & 2-segment articulated Inserter arms
+    this.drawItemsAndInserterArms(
+      ctx,
+      world,
+      minX,
+      maxX,
+      minY,
+      maxY,
+      tilePx,
+      cbMode,
+      simAlpha
+    );
 
     // 5. Alt-Mode & Tunnel Link Overlays
     if (opts.showAltMode) {
-      this.drawAltModeOverlays(ctx, world, minX, maxX, minY, maxY, tilePx, opts.colorblind);
+      this.drawAltModeOverlays(ctx, world, minX, maxX, minY, maxY, tilePx, cbMode);
     }
 
-    // 6. Night lighting tint & additive industrial glow
-    this.drawDayNightGlow(ctx, world, minX, maxX, minY, maxY, tilePx);
+    // 6. Power Grid Overlay (when toggled via showPowerOverlay)
+    if (opts.showPowerOverlay) {
+      this.drawPowerOverlay(ctx, world, minX, maxX, minY, maxY, tilePx, cbMode);
+    }
 
-    // 7. Interactive Ghosts, Drag Belts, Blueprint Stamp, Selection & Mining Laser
-    this.drawInteractionOverlays(ctx, world, tilePx, timeSec, opts);
+    // 7. Night lighting tint & pre-baked additive industrial glow
+    this.drawDayNightGlow(ctx, world, minX, maxX, minY, maxY, tilePx, cbMode);
+
+    // 8. Interactive Ghosts, Drag Belts, Blueprint Stamp, Selection & Mining Laser
+    this.drawInteractionOverlays(ctx, world, tilePx, timeSec, dt, opts, cbMode, reducedMotion);
+
+    // 9. Pooled zero-GC 2.5D Particle VFX
+    this.particles.render(ctx, minX, maxX, minY, maxY, tilePx, reducedMotion);
 
     ctx.restore();
 
-    // 8. Interactive Minimap (screen space)
-    this.drawMinimap(ctx, viewW, viewH, world, cam);
+    // 10. Interactive Minimap (screen space, offscreen cached)
+    this.drawMinimap(ctx, viewW, viewH, world, cam, timeSec, cbMode, opts.uiScale ?? 1);
+  }
+
+  private ensureTerrainCache(world: WorldState, cbMode: ColorblindMode): boolean {
+    if (typeof document === 'undefined') return false;
+    if (
+      this.terrainCanvas &&
+      this.cachedTerrainSeed === world.seed &&
+      this.cachedTerrainSize === world.size &&
+      this.cachedTerrainCb === cbMode
+    ) {
+      return true;
+    }
+
+    // shortcut: terrain offscreen cache assumes WORLD_SIZE = 64 (3072x3072); switch to chunked 512px tile cache if world exceeds 64x64
+    const sizePx = world.size * BASE_TILE_PX;
+    if (!this.terrainCanvas || this.terrainCanvas.width !== sizePx) {
+      this.terrainCanvas = document.createElement('canvas');
+      this.terrainCanvas.width = sizePx;
+      this.terrainCanvas.height = sizePx;
+    }
+
+    const tctx = this.terrainCanvas.getContext('2d');
+    if (!tctx) return false;
+
+    const palette = cbMode !== 'none' ? ORE_PALETTE_CB : ORE_PALETTE;
+    this.cachedVentTiles.length = 0;
+
+    tctx.fillStyle = '#0f1623';
+    tctx.fillRect(0, 0, sizePx, sizePx);
+
+    for (let y = 0; y < world.size; y++) {
+      for (let x = 0; x < world.size; x++) {
+        const px = x * BASE_TILE_PX;
+        const py = y * BASE_TILE_PX;
+        if ((x + y) % 2 === 0) {
+          tctx.fillStyle = 'rgba(255,255,255,0.015)';
+          tctx.fillRect(px, py, BASE_TILE_PX, BASE_TILE_PX);
+        }
+        const idx = y * world.size + x;
+        const res = world.resources[idx];
+        if (res === 'none') continue;
+        if (res === 'geothermal_vent') {
+          this.cachedVentTiles.push(idx);
+        }
+        drawOreDepositShapes(tctx, res, px, py, BASE_TILE_PX, palette[res], x, y);
+      }
+    }
+
+    this.cachedTerrainSeed = world.seed;
+    this.cachedTerrainSize = world.size;
+    this.cachedTerrainCb = cbMode;
+    return true;
   }
 
   private drawTerrain(
@@ -138,59 +492,101 @@ export class FactoryRenderer {
     minY: number,
     maxY: number,
     tilePx: number,
-    timeSec: number
+    timeSec: number,
+    dt: number,
+    cbMode: ColorblindMode,
+    reducedMotion: boolean
   ): void {
-    // Ground base slab
-    ctx.fillStyle = '#0f1623';
-    ctx.fillRect(minX * tilePx, minY * tilePx, (maxX - minX + 1) * tilePx, (maxY - minY + 1) * tilePx);
+    const palette = cbMode !== 'none' ? ORE_PALETTE_CB : ORE_PALETTE;
+    const hasCached = this.ensureTerrainCache(world, cbMode);
 
-    for (let y = minY; y <= maxY; y++) {
-      for (let x = minX; x <= maxX; x++) {
+    if (hasCached && this.terrainCanvas) {
+      const sx = minX * BASE_TILE_PX;
+      const sy = minY * BASE_TILE_PX;
+      const sw = (maxX - minX + 1) * BASE_TILE_PX;
+      const sh = (maxY - minY + 1) * BASE_TILE_PX;
+      if (sw > 0 && sh > 0) {
+        ctx.drawImage(
+          this.terrainCanvas,
+          sx,
+          sy,
+          sw,
+          sh,
+          minX * tilePx,
+          minY * tilePx,
+          (maxX - minX + 1) * tilePx,
+          (maxY - minY + 1) * tilePx
+        );
+      }
+
+      // Animate only geothermal vents inside viewport
+      const prevAlpha = ctx.globalAlpha;
+      const ventCol = cbMode !== 'none' ? '#fb7185' : '#fb923c';
+      for (let i = 0; i < this.cachedVentTiles.length; i++) {
+        const idx = this.cachedVentTiles[i];
+        const x = idx % world.size;
+        const y = (idx / world.size) | 0;
+        if (x < minX || x > maxX || y < minY || y > maxY) continue;
         const px = x * tilePx;
         const py = y * tilePx;
+        const pulse = reducedMotion ? 0.65 : 0.55 + 0.45 * Math.sin(timeSec * 4 + x + y);
+        ctx.globalAlpha = 0.35 + pulse * 0.45;
+        ctx.fillStyle = ventCol;
+        ctx.beginPath();
+        ctx.arc(px + tilePx * 0.5, py + tilePx * 0.5, tilePx * 0.32, 0, Math.PI * 2);
+        ctx.fill();
 
-        // Subtle checkerboard basalt variation
-        if ((x + y) % 2 === 0) {
-          ctx.fillStyle = 'rgba(255,255,255,0.015)';
-          ctx.fillRect(px, py, tilePx, tilePx);
+        ctx.globalAlpha = prevAlpha;
+        ctx.strokeStyle = '#fde68a';
+        ctx.lineWidth = Math.max(1, tilePx * 0.04);
+        ctx.beginPath();
+        ctx.arc(
+          px + tilePx * 0.5,
+          py + tilePx * 0.5,
+          tilePx * (0.18 + 0.1 * pulse),
+          0,
+          Math.PI * 2
+        );
+        ctx.stroke();
+
+        if (!reducedMotion && dt > 0 && this.nextFxRand() < dt * 1.1) {
+          this.particles.spawnBurst(x + 0.5, y + 0.5, 'steam');
         }
-
-        const res = world.resources[tileIndex(x, y)];
-        if (res === 'none') continue;
-
-        const pal = ORE_PALETTE[res];
-        ctx.fillStyle = pal.base;
-        ctx.fillRect(px + 1, py + 1, tilePx - 2, tilePx - 2);
-
-        if (res === 'geothermal_vent') {
-          const pulse = 0.55 + 0.45 * Math.sin(timeSec * 4 + x + y);
-          ctx.fillStyle = `rgba(251, 146, 60, ${0.35 + pulse * 0.45})`;
-          ctx.beginPath();
-          ctx.arc(px + tilePx * 0.5, py + tilePx * 0.5, tilePx * 0.34, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = '#fde68a';
-          ctx.lineWidth = Math.max(1, tilePx * 0.04);
-          ctx.beginPath();
-          ctx.arc(
-            px + tilePx * 0.5,
-            py + tilePx * 0.5,
-            tilePx * (0.18 + 0.1 * pulse),
-            0,
-            Math.PI * 2
-          );
-          ctx.stroke();
-        } else {
-          // Deterministic mineral crystal shards on tile
-          ctx.fillStyle = pal.fleck;
-          const h = ((x * 73856093) ^ (y * 19349663)) >>> 0;
-          for (let k = 0; k < 4; k++) {
-            const ox = ((h >> (k * 4)) & 7) / 10 + 0.15;
-            const oy = ((h >> (k * 4 + 2)) & 7) / 10 + 0.15;
-            const s = tilePx * 0.14;
-            ctx.fillRect(px + ox * tilePx * 0.75, py + oy * tilePx * 0.75, s, s);
+      }
+      ctx.globalAlpha = prevAlpha;
+    } else {
+      // Headless / fallback direct terrain rendering
+      ctx.fillStyle = '#0f1623';
+      ctx.fillRect(
+        minX * tilePx,
+        minY * tilePx,
+        (maxX - minX + 1) * tilePx,
+        (maxY - minY + 1) * tilePx
+      );
+      const prevAlpha = ctx.globalAlpha;
+      for (let y = minY; y <= maxY; y++) {
+        for (let x = minX; x <= maxX; x++) {
+          const px = x * tilePx;
+          const py = y * tilePx;
+          if ((x + y) % 2 === 0) {
+            ctx.fillStyle = 'rgba(255,255,255,0.015)';
+            ctx.fillRect(px, py, tilePx, tilePx);
+          }
+          const res = world.resources[tileIndex(x, y)];
+          if (res === 'none') continue;
+          drawOreDepositShapes(ctx, res, px, py, tilePx, palette[res], x, y);
+          if (res === 'geothermal_vent') {
+            const pulse = reducedMotion ? 0.65 : 0.55 + 0.45 * Math.sin(timeSec * 4 + x + y);
+            ctx.globalAlpha = 0.35 + pulse * 0.45;
+            ctx.fillStyle = '#fb923c';
+            ctx.beginPath();
+            ctx.arc(px + tilePx * 0.5, py + tilePx * 0.5, tilePx * 0.32, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = prevAlpha;
           }
         }
       }
+      ctx.globalAlpha = prevAlpha;
     }
 
     // Subtle tile grid lines
@@ -219,8 +615,13 @@ export class FactoryRenderer {
     maxY: number,
     tilePx: number,
     timeSec: number,
-    opts: RenderOptions
+    dt: number,
+    opts: RenderOptions,
+    cbMode: ColorblindMode,
+    reducedMotion: boolean
   ): void {
+    const cap = BUILDINGS.accumulator.energy_capacity_mj ?? 120;
+
     for (let y = minY; y <= maxY; y++) {
       for (let x = minX; x <= maxX; x++) {
         if (isHubTile(x, y)) continue;
@@ -229,16 +630,52 @@ export class FactoryRenderer {
 
         const px = x * tilePx;
         const py = y * tilePx;
-        const cap = BUILDINGS.accumulator.energy_capacity_mj ?? 120;
+        const isWorking = b.status === 'working';
 
-        drawBuildingGlyph(ctx, b.type, b.dir, px, py, tilePx, timeSec, {
-          active: b.status === 'working',
-          status: b.status,
-          energyRatio: b.energyMj / cap,
-          tunnelMode: b.tunnelMode,
-          colorblind: opts.colorblind,
-          geoBonus: b.geoBonus,
-        });
+        reusableGlyphOpts.active = isWorking;
+        reusableGlyphOpts.status = b.status;
+        reusableGlyphOpts.energyRatio = b.energyMj / cap;
+        reusableGlyphOpts.tunnelMode = b.tunnelMode;
+        reusableGlyphOpts.colorblind = cbMode;
+        reusableGlyphOpts.geoBonus = b.geoBonus;
+        reusableGlyphOpts.entryDir = isBeltType(b.type) ? detectBeltEntryDir(world, b) : undefined;
+        reusableGlyphOpts.reducedMotion = reducedMotion;
+
+        drawBuildingGlyph(ctx, b.type, b.dir, px, py, tilePx, timeSec, reusableGlyphOpts);
+
+        // Emit subtle contextual industrial particles on working machines
+        if (!reducedMotion && dt > 0 && isWorking) {
+          if (b.type === 'smelter' || b.type === 'foundry' || b.type === 'coal_generator') {
+            if (this.nextFxRand() < dt * 1.4) {
+              this.particles.spawnBurst(x + 0.5, y + 0.45, 'ember');
+            }
+            if (this.nextFxRand() < dt * 0.9) {
+              this.particles.spawnBurst(x + 0.5, y + 0.35, 'wisp');
+            }
+          } else if (b.type === 'miner_mk1' || b.type === 'miner_mk2') {
+            if (this.nextFxRand() < dt * 1.8) {
+              const res = world.resources[tileIndex(x, y)];
+              this.particles.spawnBurst(x + 0.5, y + 0.5, 'ore_chip', oreParticleColorIdx(res));
+            }
+          } else if (b.type === 'assembler' || b.type === 'constructor') {
+            if (this.nextFxRand() < dt * 1.3) {
+              this.particles.spawnBurst(x + 0.5, y + 0.5, 'spark', PARTICLE_COLOR_INDEX.cyan);
+            }
+          } else if (b.type === 'research_lab') {
+            if (this.nextFxRand() < dt * 1.5) {
+              this.particles.spawnBurst(
+                x + 0.5,
+                y + 0.45,
+                'spark',
+                this.nextFxRand() > 0.5 ? PARTICLE_COLOR_INDEX.cyan : PARTICLE_COLOR_INDEX.indigo
+              );
+            }
+          } else if (b.type === 'geothermal_plant') {
+            if (this.nextFxRand() < dt * 1.6) {
+              this.particles.spawnBurst(x + 0.5, y + 0.35, 'steam');
+            }
+          }
+        }
 
         // Progress bar on active processors/miners
         if (
@@ -271,7 +708,9 @@ export class FactoryRenderer {
     ctx: CanvasRenderingContext2D,
     world: WorldState,
     tilePx: number,
-    timeSec: number
+    timeSec: number,
+    dt: number,
+    reducedMotion: boolean
   ): void {
     const hx = HUB_ORIGIN * tilePx;
     const hy = HUB_ORIGIN * tilePx;
@@ -280,11 +719,13 @@ export class FactoryRenderer {
     const cy = hy + size * 0.5;
 
     ctx.save();
-    // Base pad & perimeter intake ports
+    // Base pad with 2.5D south rim & perimeter intake ports
     ctx.fillStyle = '#0f172a';
     ctx.strokeStyle = '#f59e0b';
     ctx.lineWidth = Math.max(2, tilePx * 0.08);
     ctx.fillRect(hx + 2, hy + 2, size - 4, size - 4);
+    ctx.fillStyle = 'rgba(2, 6, 23, 0.45)';
+    ctx.fillRect(hx + 2, hy + size - tilePx * 0.18, size - 4, tilePx * 0.16);
     ctx.strokeRect(hx + 2, hy + 2, size - 4, size - 4);
 
     // 12 intake bay chevrons around perimeter
@@ -304,10 +745,10 @@ export class FactoryRenderer {
     ctx.arc(cx, cy, size * 0.34, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Animated telemetry scanner sweep
+    // Telemetry scanner sweep (paused cleanly when reducedMotion is active)
     ctx.save();
     ctx.translate(cx, cy);
-    ctx.rotate(timeSec * 0.9);
+    ctx.rotate(reducedMotion ? 0.35 : timeSec * 0.9);
     ctx.strokeStyle = '#38bdf8';
     ctx.lineWidth = Math.max(2, tilePx * 0.06);
     ctx.beginPath();
@@ -315,29 +756,67 @@ export class FactoryRenderer {
     ctx.stroke();
     ctx.restore();
 
-    // Central Rocket Pod (launches skyward during world.rocketTimer > 0!)
-    const launchProgress = world.rocketTimer > 0 ? 1 - world.rocketTimer / 4.5 : 0;
-    const liftY = launchProgress > 0 ? -Math.pow(launchProgress, 2) * size * 8 : 0;
+    // Central Rocket Pod (launches skyward during world.rocketTimer > 0)
+    const launchProgress = world.rocketTimer > 0 ? Math.max(0, Math.min(1, 1 - world.rocketTimer / 4.5)) : 0;
+    const liftTiles = launchProgress > 0 ? -Math.pow(launchProgress, 2) * HUB_SIZE * 8 : 0;
+    const liftY = liftTiles * tilePx;
     const rocketScale = 1 + launchProgress * 0.65;
+
+    if (!reducedMotion && world.rocketTimer > 0) {
+      const hubTileCenter = HUB_ORIGIN + HUB_SIZE * 0.5;
+      if (this.prevRocketTimer <= 0) {
+        this.particles.spawnBurst(hubTileCenter, hubTileCenter, 'shockwave');
+      }
+      if (dt > 0) {
+        this.particles.spawnBurst(
+          hubTileCenter,
+          hubTileCenter + liftTiles + 0.45 * rocketScale,
+          'rocket_exhaust'
+        );
+      }
+    }
+    this.prevRocketTimer = world.rocketTimer;
 
     ctx.save();
     ctx.translate(cx, cy + liftY);
     ctx.scale(rocketScale, rocketScale);
 
     if (launchProgress > 0) {
-      // Thruster plasma flame & smoke ring
-      const flameH = size * (0.45 + 0.18 * Math.sin(timeSec * 45));
-      const grad = ctx.createLinearGradient(0, size * 0.1, 0, size * 0.1 + flameH);
-      grad.addColorStop(0, '#ffffff');
-      grad.addColorStop(0.35, '#fbbf24');
-      grad.addColorStop(1, 'rgba(239, 68, 68, 0)');
-      ctx.fillStyle = grad;
+      // Thruster plasma flame (steady fade on reducedMotion, zero linear-gradient alloc)
+      const prevAlpha = ctx.globalAlpha;
+      const flameH = reducedMotion
+        ? size * 0.48
+        : size * (0.45 + 0.18 * Math.sin(timeSec * 45));
+      const flameAlpha = reducedMotion ? Math.max(0.2, 0.85 * (1 - launchProgress * 0.6)) : 0.9;
+
+      ctx.globalAlpha = prevAlpha * flameAlpha * 0.55;
+      ctx.fillStyle = '#ef4444';
       ctx.beginPath();
-      ctx.moveTo(-size * 0.12, size * 0.14);
+      ctx.moveTo(-size * 0.13, size * 0.14);
       ctx.lineTo(0, size * 0.14 + flameH);
-      ctx.lineTo(size * 0.12, size * 0.14);
+      ctx.lineTo(size * 0.13, size * 0.14);
       ctx.closePath();
       ctx.fill();
+
+      ctx.globalAlpha = prevAlpha * flameAlpha * 0.85;
+      ctx.fillStyle = '#fbbf24';
+      ctx.beginPath();
+      ctx.moveTo(-size * 0.08, size * 0.14);
+      ctx.lineTo(0, size * 0.14 + flameH * 0.72);
+      ctx.lineTo(size * 0.08, size * 0.14);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.globalAlpha = prevAlpha * flameAlpha;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(-size * 0.04, size * 0.14);
+      ctx.lineTo(0, size * 0.14 + flameH * 0.38);
+      ctx.lineTo(size * 0.04, size * 0.14);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.globalAlpha = prevAlpha;
     }
 
     // Rocket fuselage
@@ -369,9 +848,11 @@ export class FactoryRenderer {
     minY: number,
     maxY: number,
     tilePx: number,
-    opts: RenderOptions
+    cbMode: ColorblindMode,
+    simAlpha: number
   ): void {
     const itemSize = Math.max(10, tilePx * 0.44);
+    const insBaseSpeed = (BUILDINGS.inserter.speed ?? 1.5) * world.power.satisfaction;
 
     for (let y = minY; y <= maxY; y++) {
       for (let x = minX; x <= maxX; x++) {
@@ -379,9 +860,25 @@ export class FactoryRenderer {
         if (!b) continue;
 
         if (isBeltType(b.type) || b.type === 'splitter' || b.type === 'merger') {
-          for (const slot of b.slots) {
-            const pos = this.beltItemPos(b, slot.progress, slot.sourceDir, tilePx);
-            drawItemIcon(ctx, slot.item, pos.x, pos.y, itemSize, opts.colorblind);
+          const slots = b.slots;
+          if (slots.length === 0) continue;
+          const speed = BUILDINGS[b.type].speed ?? 2;
+          const step = speed * DT * simAlpha;
+          let leadVisualP = 1.0;
+
+          for (let i = 0; i < slots.length; i++) {
+            const slot = slots[i];
+            let p = slot.progress;
+            if (simAlpha > 0) {
+              if (i === 0) {
+                p = Math.min(1.0, p + step);
+              } else {
+                p = Math.min(Math.max(p, leadVisualP - 0.5), p + step);
+              }
+            }
+            leadVisualP = p;
+            this.writeBeltItemPos(b, p, slot.sourceDir, tilePx);
+            drawItemFromAtlas(ctx, slot.item, scratchPos.x, scratchPos.y, itemSize, cbMode);
           }
           continue;
         }
@@ -389,60 +886,116 @@ export class FactoryRenderer {
         if (b.type === 'inserter') {
           const cx = (b.x + 0.5) * tilePx;
           const cy = (b.y + 0.5) * tilePx;
-          // Interpolate arm tip from source tile (-dir) to target tile (+dir)
-          const p = b.inserterProgress; // 0 = at source, 1 = at target
-          const reach = (p - 0.5) * 1.45 * tilePx;
-          const tipX = cx + DIR_DX[b.dir] * reach;
-          const tipY = cy + DIR_DY[b.dir] * reach;
 
-          ctx.strokeStyle = '#fbbf24';
-          ctx.lineWidth = Math.max(2, tilePx * 0.08);
+          let p = b.inserterProgress;
+          if (simAlpha > 0 && b.status === 'working') {
+            if (b.inserterItem !== null) {
+              p = Math.min(1.0, p + insBaseSpeed * 2 * DT * simAlpha);
+            } else if (b.inserterPhase === 'to_source' && p > 0) {
+              p = Math.max(0, p - insBaseSpeed * 2 * DT * simAlpha);
+            }
+          }
+
+          const dx = DIR_DX[b.dir];
+          const dy = DIR_DY[b.dir];
+          const perpX = -dy;
+          const perpY = dx;
+          const reach = (p - 0.5) * 1.45 * tilePx;
+          const tipX = cx + dx * reach;
+          const tipY = cy + dy * reach;
+
+          // 2-segment articulated elbow geometry
+          const dNorm = reach / tilePx;
+          const bend = Math.sqrt(Math.max(0.06, 0.62 - dNorm * dNorm)) * tilePx * 0.38;
+          const elbowX = (cx + tipX) * 0.5 + perpX * bend;
+          const elbowY = (cy + tipY) * 0.5 + perpY * bend;
+
+          // Arm drop shadow
+          const shX = tilePx * 0.04;
+          const shY = tilePx * 0.06;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
+          ctx.lineWidth = Math.max(2.5, tilePx * 0.09);
+          ctx.beginPath();
+          ctx.moveTo(cx + shX, cy + shY);
+          ctx.lineTo(elbowX + shX, elbowY + shY);
+          ctx.lineTo(tipX + shX, tipY + shY);
+          ctx.stroke();
+
+          // Segment 1 (shoulder -> elbow)
+          ctx.strokeStyle = '#d97706';
+          ctx.lineWidth = Math.max(2.5, tilePx * 0.095);
           ctx.beginPath();
           ctx.moveTo(cx, cy);
+          ctx.lineTo(elbowX, elbowY);
+          ctx.stroke();
+
+          // Segment 2 (elbow -> claw)
+          ctx.strokeStyle = '#fbbf24';
+          ctx.lineWidth = Math.max(2, tilePx * 0.07);
+          ctx.beginPath();
+          ctx.moveTo(elbowX, elbowY);
           ctx.lineTo(tipX, tipY);
+          ctx.stroke();
+
+          // Elbow pivot pin
+          ctx.fillStyle = '#e2e8f0';
+          ctx.beginPath();
+          ctx.arc(elbowX, elbowY, Math.max(2, tilePx * 0.055), 0, Math.PI * 2);
+          ctx.fill();
+
+          // Articulated gripper claw
+          const clawSpan = b.inserterItem ? tilePx * 0.1 : tilePx * 0.14;
+          const clawLen = tilePx * 0.1;
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = Math.max(1.5, tilePx * 0.05);
+          ctx.beginPath();
+          ctx.moveTo(tipX + perpX * clawSpan, tipY + perpY * clawSpan);
+          ctx.lineTo(tipX, tipY);
+          ctx.lineTo(tipX - perpX * clawSpan, tipY - perpY * clawSpan);
+          ctx.moveTo(tipX + perpX * clawSpan, tipY + perpY * clawSpan);
+          ctx.lineTo(tipX + perpX * clawSpan + dx * clawLen, tipY + perpY * clawSpan + dy * clawLen);
+          ctx.moveTo(tipX - perpX * clawSpan, tipY - perpY * clawSpan);
+          ctx.lineTo(tipX - perpX * clawSpan + dx * clawLen, tipY - perpY * clawSpan + dy * clawLen);
           ctx.stroke();
 
           ctx.fillStyle = '#38bdf8';
           ctx.beginPath();
-          ctx.arc(tipX, tipY, Math.max(2.5, tilePx * 0.08), 0, Math.PI * 2);
+          ctx.arc(tipX, tipY, Math.max(2.2, tilePx * 0.065), 0, Math.PI * 2);
           ctx.fill();
 
           if (b.inserterItem) {
-            drawItemIcon(ctx, b.inserterItem, tipX, tipY, itemSize * 0.9, opts.colorblind);
+            drawItemFromAtlas(ctx, b.inserterItem, tipX, tipY, itemSize * 0.9, cbMode);
           }
         }
       }
     }
   }
 
-  private beltItemPos(
+  private writeBeltItemPos(
     b: BuildingEntity,
     progress: number,
     sourceDir: Direction | undefined,
     tilePx: number
-  ): { x: number; y: number } {
+  ): void {
     const cx = (b.x + 0.5) * tilePx;
     const cy = (b.y + 0.5) * tilePx;
-    const outX = DIR_DX[b.dir] * 0.5 * tilePx;
-    const outY = DIR_DY[b.dir] * 0.5 * tilePx;
 
     if (sourceDir !== undefined && sourceDir !== ((b.dir + 2) & 3)) {
-      // Quadratic curve from perpendicular entry edge through center to exit edge
+      const outX = DIR_DX[b.dir] * 0.5 * tilePx;
+      const outY = DIR_DY[b.dir] * 0.5 * tilePx;
       const inX = DIR_DX[sourceDir] * 0.5 * tilePx;
       const inY = DIR_DY[sourceDir] * 0.5 * tilePx;
-      const t = progress;
-      const mt = 1 - t;
-      return {
-        x: cx + mt * mt * inX + t * t * outX,
-        y: cy + mt * mt * inY + t * t * outY,
-      };
+      const mt = 1 - progress;
+      scratchPos.x = cx + mt * mt * inX + progress * progress * outX;
+      scratchPos.y = cy + mt * mt * inY + progress * progress * outY;
+      return;
     }
 
     const offset = (progress - 0.5) * tilePx;
-    return {
-      x: cx + DIR_DX[b.dir] * offset,
-      y: cy + DIR_DY[b.dir] * offset,
-    };
+    scratchPos.x = cx + DIR_DX[b.dir] * offset;
+    scratchPos.y = cy + DIR_DY[b.dir] * offset;
   }
 
   private drawAltModeOverlays(
@@ -453,8 +1006,12 @@ export class FactoryRenderer {
     minY: number,
     maxY: number,
     tilePx: number,
-    colorblind: boolean
+    cbMode: ColorblindMode
   ): void {
+    const fontPx = Math.max(10, Math.round(tilePx * 0.22));
+    ctx.font = getMonoFont(fontPx);
+    ctx.textAlign = 'center';
+
     for (let y = minY; y <= maxY; y++) {
       for (let x = minX; x <= maxX; x++) {
         const b = getBuildingAt(world, x, y);
@@ -470,7 +1027,7 @@ export class FactoryRenderer {
             ctx.save();
             ctx.strokeStyle = 'rgba(56, 189, 248, 0.75)';
             ctx.lineWidth = Math.max(1.5, tilePx * 0.06);
-            ctx.setLineDash([5, 4]);
+            ctx.setLineDash(TUNNEL_DASH);
             ctx.beginPath();
             ctx.moveTo(cx, cy);
             ctx.lineTo((exit.x + 0.5) * tilePx, (exit.y + 0.5) * tilePx);
@@ -494,24 +1051,175 @@ export class FactoryRenderer {
           ctx.beginPath();
           ctx.arc(cx, cy, tilePx * 0.28, 0, Math.PI * 2);
           ctx.fill();
-          drawItemIcon(ctx, iconItem, cx, cy, tilePx * 0.44, colorblind);
+          drawItemFromAtlas(ctx, iconItem, cx, cy, tilePx * 0.44, cbMode);
         }
 
         // Clock % badge when overclocked/underclocked
         if (b.clock !== 1.0 && tilePx >= 28) {
           ctx.fillStyle = b.clock > 1 ? '#f59e0b' : '#38bdf8';
-          ctx.font = `bold ${Math.max(10, Math.round(tilePx * 0.22))}px monospace`;
-          ctx.textAlign = 'center';
-          ctx.fillText(`${Math.round(b.clock * 100)}%`, cx, (y + 0.24) * tilePx);
+          ctx.fillText(getClockLabel(b.clock), cx, (y + 0.24) * tilePx);
         }
 
         // Status ring on malfunctioning buildings
         if (b.status === 'no_power' || b.status === 'output_full' || b.status === 'unpaired') {
-          ctx.strokeStyle = statusColor(b.status, colorblind);
+          ctx.strokeStyle = statusColor(b.status, cbMode);
           ctx.lineWidth = 2;
           ctx.strokeRect(x * tilePx + 2, y * tilePx + 2, tilePx - 4, tilePx - 4);
         }
       }
+    }
+  }
+
+  private drawPowerOverlay(
+    ctx: CanvasRenderingContext2D,
+    world: WorldState,
+    minX: number,
+    maxX: number,
+    minY: number,
+    maxY: number,
+    tilePx: number,
+    cbMode: ColorblindMode
+  ): void {
+    const sat = world.power.satisfaction;
+    const prevAlpha = ctx.globalAlpha;
+    const accCap = BUILDINGS.accumulator.energy_capacity_mj ?? 120;
+    const showText = tilePx >= 28;
+    if (showText) {
+      ctx.font = getMonoFont(Math.max(10, Math.round(tilePx * 0.2)));
+      ctx.textAlign = 'center';
+    }
+
+    // Highlight Hub power radius / generation
+    const hubX = HUB_ORIGIN * tilePx;
+    const hubY = HUB_ORIGIN * tilePx;
+    const hubSize = HUB_SIZE * tilePx;
+    ctx.globalAlpha = prevAlpha * 0.16;
+    ctx.fillStyle = cbMode === 'none' ? '#22c55e' : '#38bdf8';
+    ctx.fillRect(hubX, hubY, hubSize, hubSize);
+    ctx.globalAlpha = prevAlpha;
+    ctx.strokeStyle = cbMode === 'none' ? '#22c55e' : '#38bdf8';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(hubX + 1, hubY + 1, hubSize - 2, hubSize - 2);
+
+    const okColor = cbMode === 'none' ? '#22c55e' : '#38bdf8';
+    const warnColor = cbMode === 'tritanopia' ? '#f472b6' : '#f59e0b';
+    const failColor = cbMode === 'none' ? '#ef4444' : '#fb7185';
+
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        const px = x * tilePx;
+        const py = y * tilePx;
+        const res = world.resources[tileIndex(x, y)];
+        const b = isHubTile(x, y) ? null : getBuildingAt(world, x, y);
+
+        if (!b) {
+          if (res === 'geothermal_vent') {
+            ctx.save();
+            ctx.strokeStyle = '#fb923c';
+            ctx.lineWidth = 2;
+            ctx.setLineDash(POWER_DASH);
+            ctx.strokeRect(px + 2, py + 2, tilePx - 4, tilePx - 4);
+            ctx.restore();
+          }
+          continue;
+        }
+
+        const def = BUILDINGS[b.type];
+        if (def.generates_mw > 0) {
+          ctx.globalAlpha = prevAlpha * 0.22;
+          ctx.fillStyle = okColor;
+          ctx.fillRect(px, py, tilePx, tilePx);
+          ctx.globalAlpha = prevAlpha;
+          ctx.strokeStyle = okColor;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(px + 1, py + 1, tilePx - 2, tilePx - 2);
+          if (showText) {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(getPowerLabel(b.activePowerMw, true), px + tilePx * 0.5, py + tilePx * 0.24);
+          }
+        } else if (b.type === 'accumulator') {
+          const ratio = Math.max(0, Math.min(1, b.energyMj / accCap));
+          ctx.globalAlpha = prevAlpha * 0.22;
+          ctx.fillStyle = '#06b6d4';
+          ctx.fillRect(px, py + tilePx * (1 - ratio), tilePx, tilePx * ratio);
+          ctx.globalAlpha = prevAlpha;
+          ctx.strokeStyle = '#22d3ee';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(px + 1, py + 1, tilePx - 2, tilePx - 2);
+        } else if (def.power_mw > 0) {
+          const col =
+            b.status === 'no_power' || sat < 0.5
+              ? failColor
+              : sat < 0.99
+                ? warnColor
+                : '#38bdf8';
+          ctx.globalAlpha = prevAlpha * (b.status === 'no_power' ? 0.3 : 0.14);
+          ctx.fillStyle = col;
+          ctx.fillRect(px, py, tilePx, tilePx);
+          ctx.globalAlpha = prevAlpha;
+          ctx.strokeStyle = col;
+          ctx.lineWidth = b.status === 'no_power' ? 2.5 : 1.5;
+          ctx.strokeRect(px + 1, py + 1, tilePx - 2, tilePx - 2);
+          if (b.status === 'no_power') {
+            ctx.beginPath();
+            ctx.moveTo(px + 3, py + 3);
+            ctx.lineTo(px + tilePx - 3, py + tilePx - 3);
+            ctx.moveTo(px + tilePx - 3, py + 3);
+            ctx.lineTo(px + 3, py + tilePx - 3);
+            ctx.stroke();
+          }
+          if (showText) {
+            ctx.fillStyle = '#e2e8f0';
+            ctx.fillText(getPowerLabel(b.activePowerMw, false), px + tilePx * 0.5, py + tilePx * 0.24);
+          }
+        }
+      }
+    }
+
+    ctx.globalAlpha = prevAlpha;
+  }
+
+  private ensureGlowSprites(): void {
+    if (typeof document === 'undefined') return;
+    if (!this.glowCyan) this.glowCyan = this.bakeGlowCanvas('rgba(56, 189, 248, 1)', 'rgba(56, 189, 248, 0)');
+    if (!this.glowOrange) this.glowOrange = this.bakeGlowCanvas('rgba(251, 146, 60, 1)', 'rgba(251, 146, 60, 0)');
+    if (!this.glowIndigo) this.glowIndigo = this.bakeGlowCanvas('rgba(129, 140, 248, 1)', 'rgba(129, 140, 248, 0)');
+  }
+
+  private bakeGlowCanvas(innerColor: string, outerColor: string): HTMLCanvasElement {
+    const c = document.createElement('canvas');
+    c.width = GLOW_TEX_SIZE;
+    c.height = GLOW_TEX_SIZE;
+    const gctx = c.getContext('2d');
+    if (gctx) {
+      const half = GLOW_TEX_SIZE * 0.5;
+      const grad = gctx.createRadialGradient(half, half, 0, half, half, half);
+      grad.addColorStop(0, innerColor);
+      grad.addColorStop(0.45, innerColor);
+      grad.addColorStop(1, outerColor);
+      gctx.fillStyle = grad;
+      gctx.fillRect(0, 0, GLOW_TEX_SIZE, GLOW_TEX_SIZE);
+    }
+    return c;
+  }
+
+  private stampGlow(
+    ctx: CanvasRenderingContext2D,
+    sprite: HTMLCanvasElement | null,
+    gx: number,
+    gy: number,
+    rad: number,
+    alpha: number,
+    fallbackHex: string
+  ): void {
+    ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+    if (sprite) {
+      ctx.drawImage(sprite, gx - rad, gy - rad, rad * 2, rad * 2);
+    } else {
+      ctx.fillStyle = fallbackHex;
+      ctx.beginPath();
+      ctx.arc(gx, gy, rad * 0.75, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
 
@@ -522,60 +1230,141 @@ export class FactoryRenderer {
     maxX: number,
     minY: number,
     maxY: number,
-    tilePx: number
+    tilePx: number,
+    cbMode: ColorblindMode
   ): void {
     const nightAlpha = Math.max(0, 1 - world.power.solarFactor) * 0.42;
-    if (nightAlpha <= 0.04) return;
+    const dt = world.dayTime;
+    const dawn = Math.max(0, 1 - Math.abs(dt - 0.03) / 0.09);
+    const dusk = Math.max(0, 1 - Math.abs(dt - 0.67) / 0.09);
+    const twilightAlpha = Math.max(dawn, dusk) * 0.13;
 
-    ctx.fillStyle = `rgba(4, 9, 24, ${nightAlpha.toFixed(3)})`;
-    ctx.fillRect(
-      minX * tilePx,
-      minY * tilePx,
-      (maxX - minX + 1) * tilePx,
-      (maxY - minY + 1) * tilePx
-    );
+    if (nightAlpha <= 0.04 && twilightAlpha <= 0.01) return;
 
-    // Additive radial light blooms around active machines, vents & Hub
+    const rx = minX * tilePx;
+    const ry = minY * tilePx;
+    const rw = (maxX - minX + 1) * tilePx;
+    const rh = (maxY - minY + 1) * tilePx;
+    const prevAlpha = ctx.globalAlpha;
+
+    if (nightAlpha > 0.04) {
+      ctx.globalAlpha = nightAlpha;
+      ctx.fillStyle = '#040918';
+      ctx.fillRect(rx, ry, rw, rh);
+    }
+
+    if (twilightAlpha > 0.01) {
+      ctx.globalAlpha = twilightAlpha;
+      ctx.fillStyle = '#9a3412';
+      ctx.fillRect(rx, ry, rw, rh);
+    }
+
+    if (nightAlpha <= 0.04) {
+      ctx.globalAlpha = prevAlpha;
+      return;
+    }
+
+    // Pre-baked additive radial light blooms
+    this.ensureGlowSprites();
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    const drawGlow = (gx: number, gy: number, rad: number, color: string) => {
-      const grad = ctx.createRadialGradient(gx, gy, 0, gx, gy, rad);
-      grad.addColorStop(0, color);
-      grad.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(gx, gy, rad, 0, Math.PI * 2);
-      ctx.fill();
-    };
 
-    drawGlow(
+    this.stampGlow(
+      ctx,
+      this.glowCyan,
       (HUB_ORIGIN + HUB_SIZE * 0.5) * tilePx,
       (HUB_ORIGIN + HUB_SIZE * 0.5) * tilePx,
       tilePx * 3.8,
-      `rgba(56, 189, 248, ${nightAlpha * 0.7})`
+      nightAlpha * 0.7,
+      '#38bdf8'
     );
+
+    const ventSprite = cbMode !== 'none' ? this.glowIndigo : this.glowOrange;
+    if (this.cachedVentTiles.length > 0) {
+      for (let i = 0; i < this.cachedVentTiles.length; i++) {
+        const idx = this.cachedVentTiles[i];
+        const vx = idx % world.size;
+        const vy = (idx / world.size) | 0;
+        if (vx < minX || vx > maxX || vy < minY || vy > maxY) continue;
+        this.stampGlow(
+          ctx,
+          ventSprite,
+          (vx + 0.5) * tilePx,
+          (vy + 0.5) * tilePx,
+          tilePx * 1.4,
+          nightAlpha * 0.8,
+          '#fb923c'
+        );
+      }
+    }
 
     for (let y = minY; y <= maxY; y++) {
       for (let x = minX; x <= maxX; x++) {
-        const px = (x + 0.5) * tilePx;
-        const py = (y + 0.5) * tilePx;
-        if (world.resources[tileIndex(x, y)] === 'geothermal_vent') {
-          drawGlow(px, py, tilePx * 1.4, `rgba(249, 115, 22, ${nightAlpha * 0.8})`);
+        if (this.cachedVentTiles.length === 0 && world.resources[tileIndex(x, y)] === 'geothermal_vent') {
+          this.stampGlow(
+            ctx,
+            ventSprite,
+            (x + 0.5) * tilePx,
+            (y + 0.5) * tilePx,
+            tilePx * 1.4,
+            nightAlpha * 0.8,
+            '#fb923c'
+          );
         }
         const b = getBuildingAt(world, x, y);
-        if (b && b.status === 'working' && (b.type === 'smelter' || b.type === 'foundry' || b.type === 'research_lab')) {
-          drawGlow(
-            px,
-            py,
+        if (
+          b &&
+          b.status === 'working' &&
+          (b.type === 'smelter' ||
+            b.type === 'foundry' ||
+            b.type === 'coal_generator' ||
+            b.type === 'research_lab')
+        ) {
+          this.stampGlow(
+            ctx,
+            b.type === 'research_lab' ? this.glowIndigo : this.glowOrange,
+            (x + 0.5) * tilePx,
+            (y + 0.5) * tilePx,
             tilePx * 1.1,
-            b.type === 'research_lab'
-              ? `rgba(129, 140, 248, ${nightAlpha * 0.8})`
-              : `rgba(251, 146, 60, ${nightAlpha * 0.7})`
+            nightAlpha * (b.type === 'research_lab' ? 0.8 : 0.7),
+            b.type === 'research_lab' ? '#818cf8' : '#fb923c'
           );
         }
       }
     }
+
     ctx.restore();
+    ctx.globalAlpha = prevAlpha;
+  }
+
+  private drawBlockedCrossHatch(
+    ctx: CanvasRenderingContext2D,
+    px: number,
+    py: number,
+    tilePx: number,
+    cbMode: ColorblindMode
+  ): void {
+    const prevAlpha = ctx.globalAlpha;
+    const strokeCol = cbMode === 'none' ? '#ef4444' : '#fb7185';
+    ctx.globalAlpha = 0.34;
+    ctx.fillStyle = strokeCol;
+    ctx.fillRect(px, py, tilePx, tilePx);
+
+    ctx.globalAlpha = 0.92;
+    ctx.strokeStyle = strokeCol;
+    ctx.lineWidth = Math.max(2, tilePx * 0.06);
+    ctx.strokeRect(px + 1, py + 1, tilePx - 2, tilePx - 2);
+
+    // Diagonal X cross-hatch non-color blocked cue
+    const pad = Math.max(3, tilePx * 0.14);
+    ctx.beginPath();
+    ctx.moveTo(px + pad, py + pad);
+    ctx.lineTo(px + tilePx - pad, py + tilePx - pad);
+    ctx.moveTo(px + tilePx - pad, py + pad);
+    ctx.lineTo(px + pad, py + tilePx - pad);
+    ctx.stroke();
+
+    ctx.globalAlpha = prevAlpha;
   }
 
   private drawInteractionOverlays(
@@ -583,7 +1372,10 @@ export class FactoryRenderer {
     world: WorldState,
     tilePx: number,
     timeSec: number,
-    opts: RenderOptions
+    dt: number,
+    opts: RenderOptions,
+    cbMode: ColorblindMode,
+    reducedMotion: boolean
   ): void {
     // Manual mining beam VFX
     if (opts.mineBeam && opts.mineBeam.timer > 0) {
@@ -603,15 +1395,38 @@ export class FactoryRenderer {
       ctx.arc(ex, ey, tilePx * 0.25, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
+
+      if (!reducedMotion && dt > 0 && this.nextFxRand() < dt * 24) {
+        const res = inBounds(opts.mineBeam.tx, opts.mineBeam.ty)
+          ? world.resources[tileIndex(opts.mineBeam.tx, opts.mineBeam.ty)]
+          : 'none';
+        this.particles.spawnBurst(
+          opts.mineBeam.tx + 0.5,
+          opts.mineBeam.ty + 0.5,
+          'mine',
+          res !== 'none' ? oreParticleColorIdx(res) : PARTICLE_COLOR_INDEX.yellow
+        );
+      }
     }
 
     // Drag belt path preview
     if (opts.dragPath.length > 0 && isBeltType(opts.selectedTool as BuildingId)) {
       const tool = opts.selectedTool as BuildingId;
-      for (const step of opts.dragPath) {
+      for (let i = 0; i < opts.dragPath.length; i++) {
+        const step = opts.dragPath[i];
+        const prevStep = i > 0 ? opts.dragPath[i - 1] : null;
+        let entryDir: Direction | undefined;
+        if (prevStep && prevStep.dir !== step.dir) {
+          entryDir = oppositeDir(prevStep.dir);
+        }
         ctx.save();
         ctx.globalAlpha = 0.65;
-        drawBuildingGlyph(ctx, tool, step.dir, step.x * tilePx, step.y * tilePx, tilePx, timeSec);
+        reusableGlyphOpts.active = true;
+        reusableGlyphOpts.status = undefined;
+        reusableGlyphOpts.colorblind = cbMode;
+        reusableGlyphOpts.entryDir = entryDir;
+        reusableGlyphOpts.reducedMotion = reducedMotion;
+        drawBuildingGlyph(ctx, tool, step.dir, step.x * tilePx, step.y * tilePx, tilePx, timeSec, reusableGlyphOpts);
         ctx.restore();
       }
       return;
@@ -645,18 +1460,39 @@ export class FactoryRenderer {
       return;
     }
 
+    const validColor = cbMode === 'none' ? '#22c55e' : '#38bdf8';
+    const validFill = cbMode === 'none' ? 'rgba(34, 197, 94, 0.22)' : 'rgba(56, 189, 248, 0.22)';
+
     // Blueprint Stamp Ghost
     if (opts.selectedTool === 'bp_stamp' && opts.activeBlueprint) {
-      for (const e of opts.activeBlueprint.entries) {
+      const entries = opts.activeBlueprint.entries;
+      for (let i = 0; i < entries.length; i++) {
+        const e = entries[i];
         const tx = hx + e.dx;
         const ty = hy + e.dy;
         if (!inBounds(tx, ty)) continue;
-        const blocked = world.grid[tileIndex(tx, ty)] !== 0;
+        const def = BUILDINGS[e.type];
+        const res = world.resources[tileIndex(tx, ty)];
+        const missingRes =
+          def &&
+          ((def.requires_resource === 'ore' && (res === 'none' || res === 'geothermal_vent')) ||
+            (def.requires_resource === 'geothermal_vent' && res !== 'geothermal_vent'));
+        const blocked = world.grid[tileIndex(tx, ty)] !== 0 || Boolean(missingRes);
+
         ctx.save();
         ctx.globalAlpha = 0.6;
-        drawBuildingGlyph(ctx, e.type, e.dir, tx * tilePx, ty * tilePx, tilePx, timeSec);
-        ctx.fillStyle = blocked ? 'rgba(239, 68, 68, 0.35)' : 'rgba(34, 197, 94, 0.25)';
-        ctx.fillRect(tx * tilePx, ty * tilePx, tilePx, tilePx);
+        reusableGlyphOpts.active = false;
+        reusableGlyphOpts.status = undefined;
+        reusableGlyphOpts.colorblind = cbMode;
+        reusableGlyphOpts.entryDir = undefined;
+        reusableGlyphOpts.reducedMotion = reducedMotion;
+        drawBuildingGlyph(ctx, e.type, e.dir, tx * tilePx, ty * tilePx, tilePx, timeSec, reusableGlyphOpts);
+        if (blocked) {
+          this.drawBlockedCrossHatch(ctx, tx * tilePx, ty * tilePx, tilePx, cbMode);
+        } else {
+          ctx.fillStyle = validFill;
+          ctx.fillRect(tx * tilePx, ty * tilePx, tilePx, tilePx);
+        }
         ctx.restore();
       }
       return;
@@ -665,19 +1501,128 @@ export class FactoryRenderer {
     // Single tile cursor / building ghost
     if (opts.selectedTool in BUILDINGS) {
       const bType = opts.selectedTool as BuildingId;
+      const def = BUILDINGS[bType];
+      const res = world.resources[tileIndex(hx, hy)];
+      const missingRes =
+        (def.requires_resource === 'ore' && (res === 'none' || res === 'geothermal_vent')) ||
+        (def.requires_resource === 'geothermal_vent' && res !== 'geothermal_vent');
+      const blocked = world.grid[tileIndex(hx, hy)] !== 0 || missingRes;
+
       ctx.save();
       ctx.globalAlpha = 0.65;
-      drawBuildingGlyph(ctx, bType, opts.toolDir, hx * tilePx, hy * tilePx, tilePx, timeSec);
-      const occupied = world.grid[tileIndex(hx, hy)] !== 0;
-      ctx.strokeStyle = occupied ? '#ef4444' : '#22c55e';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(hx * tilePx, hy * tilePx, tilePx, tilePx);
+      reusableGlyphOpts.active = true;
+      reusableGlyphOpts.status = undefined;
+      reusableGlyphOpts.colorblind = cbMode;
+      reusableGlyphOpts.entryDir = undefined;
+      reusableGlyphOpts.reducedMotion = reducedMotion;
+      drawBuildingGlyph(ctx, bType, opts.toolDir, hx * tilePx, hy * tilePx, tilePx, timeSec, reusableGlyphOpts);
+      if (blocked) {
+        this.drawBlockedCrossHatch(ctx, hx * tilePx, hy * tilePx, tilePx, cbMode);
+      } else {
+        ctx.strokeStyle = validColor;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(hx * tilePx, hy * tilePx, tilePx, tilePx);
+      }
       ctx.restore();
     } else {
-      ctx.strokeStyle = opts.selectedTool === 'deconstruct' ? '#ef4444' : '#f59e0b';
+      ctx.strokeStyle =
+        opts.selectedTool === 'deconstruct'
+          ? cbMode === 'none'
+            ? '#ef4444'
+            : '#fb7185'
+          : '#f59e0b';
       ctx.lineWidth = 2;
       ctx.strokeRect(hx * tilePx + 1, hy * tilePx + 1, tilePx - 2, tilePx - 2);
+      if (opts.selectedTool === 'deconstruct') {
+        const px = hx * tilePx;
+        const py = hy * tilePx;
+        const pad = Math.max(4, tilePx * 0.2);
+        ctx.beginPath();
+        ctx.moveTo(px + pad, py + pad);
+        ctx.lineTo(px + tilePx - pad, py + tilePx - pad);
+        ctx.moveTo(px + tilePx - pad, py + pad);
+        ctx.lineTo(px + pad, py + tilePx - pad);
+        ctx.stroke();
+      }
     }
+  }
+
+  private ensureMinimapCache(
+    world: WorldState,
+    timeSec: number,
+    cbMode: ColorblindMode
+  ): boolean {
+    if (typeof document === 'undefined') return false;
+
+    let bCount = 0;
+    for (const _k in world.buildings) bCount++;
+
+    if (!this.minimapCanvas || this.minimapCanvas.width !== world.size) {
+      this.minimapCanvas = document.createElement('canvas');
+      this.minimapCanvas.width = world.size;
+      this.minimapCanvas.height = world.size;
+      this.minimapCtx = this.minimapCanvas.getContext('2d');
+      this.minimapImgData = this.minimapCtx
+        ? this.minimapCtx.createImageData(world.size, world.size)
+        : null;
+      this.lastMinimapSeed = Number.NaN;
+    }
+
+    if (!this.minimapCtx || !this.minimapImgData) return false;
+
+    const dirty =
+      world.seed !== this.lastMinimapSeed ||
+      cbMode !== this.lastMinimapCb ||
+      bCount !== this.lastMinimapBuildingCount ||
+      Math.abs(timeSec - this.lastMinimapTimeSec) >= 0.4;
+
+    if (!dirty) return true;
+
+    const palette = cbMode !== 'none' ? ORE_PALETTE_CB : ORE_PALETTE;
+    const data = this.minimapImgData.data;
+    const size = world.size;
+
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const idx = y * size + x;
+        const off = idx * 4;
+        const gid = world.grid[idx];
+        if (gid > 0) {
+          if (isHubTile(x, y)) {
+            data[off] = 56;
+            data[off + 1] = 189;
+            data[off + 2] = 248;
+            data[off + 3] = 255;
+          } else {
+            data[off] = 245;
+            data[off + 1] = 158;
+            data[off + 2] = 11;
+            data[off + 3] = 255;
+          }
+        } else {
+          const res = world.resources[idx];
+          if (res !== 'none') {
+            const rgb = palette[res].rgb;
+            data[off] = rgb[0];
+            data[off + 1] = rgb[1];
+            data[off + 2] = rgb[2];
+            data[off + 3] = 255;
+          } else {
+            data[off] = 9;
+            data[off + 1] = 13;
+            data[off + 2] = 22;
+            data[off + 3] = 224;
+          }
+        }
+      }
+    }
+
+    this.minimapCtx.putImageData(this.minimapImgData, 0, 0);
+    this.lastMinimapSeed = world.seed;
+    this.lastMinimapCb = cbMode;
+    this.lastMinimapBuildingCount = bCount;
+    this.lastMinimapTimeSec = timeSec;
+    return true;
   }
 
   private drawMinimap(
@@ -685,11 +1630,15 @@ export class FactoryRenderer {
     viewW: number,
     viewH: number,
     world: WorldState,
-    cam: CameraState
+    cam: CameraState,
+    timeSec: number,
+    cbMode: ColorblindMode,
+    uiScale: number
   ): void {
     const size = 140;
+    const bottomOffset = Math.round(86 * Math.max(1, Math.min(1.6, uiScale)));
     const mx = viewW - size - 14;
-    const my = viewH - size - 86;
+    const my = Math.max(14, viewH - size - bottomOffset);
     this.minimapBounds = { x: mx, y: my, w: size, h: size };
 
     ctx.save();
@@ -697,25 +1646,36 @@ export class FactoryRenderer {
     ctx.strokeStyle = '#334155';
     ctx.lineWidth = 1.5;
     ctx.fillRect(mx, my, size, size);
-    ctx.strokeRect(mx, my, size, size);
 
-    const cell = size / WORLD_SIZE;
-    for (let y = 0; y < WORLD_SIZE; y++) {
-      for (let x = 0; x < WORLD_SIZE; x++) {
-        const res = world.resources[tileIndex(x, y)];
-        if (res !== 'none') {
-          ctx.fillStyle = ORE_PALETTE[res].fleck;
-          ctx.fillRect(mx + x * cell, my + y * cell, Math.ceil(cell), Math.ceil(cell));
-        }
-        const gid = world.grid[tileIndex(x, y)];
-        if (gid > 0) {
-          ctx.fillStyle = isHubTile(x, y) ? '#38bdf8' : '#f59e0b';
-          ctx.fillRect(mx + x * cell, my + y * cell, Math.ceil(cell), Math.ceil(cell));
+    if (this.ensureMinimapCache(world, timeSec, cbMode) && this.minimapCanvas) {
+      const prevSmooth = ctx.imageSmoothingEnabled;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(this.minimapCanvas, mx, my, size, size);
+      ctx.imageSmoothingEnabled = prevSmooth;
+    } else {
+      const palette = cbMode !== 'none' ? ORE_PALETTE_CB : ORE_PALETTE;
+      const cell = size / WORLD_SIZE;
+      const cellCeil = Math.ceil(cell);
+      for (let y = 0; y < WORLD_SIZE; y++) {
+        for (let x = 0; x < WORLD_SIZE; x++) {
+          const idx = tileIndex(x, y);
+          const res = world.resources[idx];
+          if (res !== 'none') {
+            ctx.fillStyle = palette[res].fleck;
+            ctx.fillRect(mx + x * cell, my + y * cell, cellCeil, cellCeil);
+          }
+          if (world.grid[idx] > 0) {
+            ctx.fillStyle = isHubTile(x, y) ? '#38bdf8' : '#f59e0b';
+            ctx.fillRect(mx + x * cell, my + y * cell, cellCeil, cellCeil);
+          }
         }
       }
     }
 
+    ctx.strokeRect(mx, my, size, size);
+
     // Viewport rectangle
+    const cell = size / WORLD_SIZE;
     const tilePx = BASE_TILE_PX * cam.zoom;
     const spanX = (viewW / tilePx) * cell;
     const spanY = (viewH / tilePx) * cell;
@@ -727,3 +1687,6 @@ export class FactoryRenderer {
     ctx.restore();
   }
 }
+
+// Re-export drawItemIcon cleanly in case external callers import it via renderer
+export { drawItemIcon };
