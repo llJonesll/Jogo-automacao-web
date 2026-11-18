@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aetherforge.local/schemas/config.schema.json",
+  "title": "AETHERFORGE Live Tuning Configuration",
+  "description": "Schema for data/config.json runtime tuning knobs formatted as { value, min, max, step, description }.",
+  "type": "object",
+  "required": [
+    "seed",
+    "mining_speed_mult",
+    "belt_speed_mult",
+    "craft_speed_mult",
+    "power_output_mult",
+    "day_cycle_seconds",
+    "free_build"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "seed": { "$ref": "#/$defs/tuning_knob_int" },
+    "mining_speed_mult": { "$ref": "#/$defs/tuning_knob" },
+    "belt_speed_mult": { "$ref": "#/$defs/tuning_knob" },
+    "craft_speed_mult": { "$ref": "#/$defs/tuning_knob" },
+    "power_output_mult": { "$ref": "#/$defs/tuning_knob" },
+    "day_cycle_seconds": { "$ref": "#/$defs/tuning_knob" },
+    "free_build": { "$ref": "#/$defs/tuning_knob_int" }
+  },
+  "$defs": {
+    "tuning_knob": {
+      "type": "object",
+      "required": ["value", "min", "max", "step"],
+      "additionalProperties": false,
+      "properties": {
+        "value": { "type": "number" },
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "step": { "type": "number", "exclusiveMinimum": 0 },
+        "description": { "type": "string", "minLength": 1 }
+      }
+    },
+    "tuning_knob_int": {
+      "type": "object",
+      "required": ["value", "min", "max", "step"],
+      "additionalProperties": false,
+      "properties": {
+        "value": { "type": "integer" },
+        "min": { "type": "integer" },
+        "max": { "type": "integer" },
+        "step": { "type": "integer", "minimum": 1 },
+        "description": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

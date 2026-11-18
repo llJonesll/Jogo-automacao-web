@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aetherforge.local/schemas/factory_items.schema.json",
+  "title": "AETHERFORGE Factory Items Catalog",
+  "description": "Schema for data/factory_items.json mapping snake_case ItemId keys to item definitions.",
+  "type": "object",
+  "minProperties": 1,
+  "additionalProperties": false,
+  "patternProperties": {
+    "^[a-z0-9_]+$": {
+      "$ref": "#/$defs/item_def"
+    }
+  },
+  "$defs": {
+    "item_def": {
+      "type": "object",
+      "required": ["id", "category", "tier", "color", "accent", "fuel_value"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+        "category": { "type": "string", "enum": ["raw", "refined", "manufactured"] },
+        "tier": { "type": "integer", "minimum": 0, "maximum": 6 },
+        "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "accent": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "fuel_value": { "type": "number", "minimum": 0 }
+      }
+    }
+  }
+}

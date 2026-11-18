@@ -1,0 +1,824 @@
+# Canonical Entity, Item, Formula, and Simulation Constants Registry
+# Authoritative cross-reference for /consistency-check and /balance-check
+schema_version: 1
+
+metadata:
+  project: "AETHERFORGE: Orbital Foundry"
+  last_verified: "2026-11-17"
+  authoritative_gdd: "design/gdd/factory-systems.md"
+  art_bible: "design/art/art-bible.md"
+  sound_bible: "design/audio/sound-bible.md"
+  hud_spec: "design/ux/hud.md"
+
+constants:
+  world_size:
+    value: 64
+    source: "design/gdd/factory-systems.md#world-generation"
+    referenced_by: ["src/core/data.ts", "src/game/world.ts", "src/game/save.ts"]
+  tick_hz:
+    value: 20
+    source: "design/gdd/factory-systems.md#summary"
+    referenced_by: ["src/core/data.ts", "src/game/progression.ts"]
+  dt:
+    value: 0.05
+    source: "design/gdd/factory-systems.md#summary"
+    referenced_by: ["src/core/data.ts", "src/game/simulation.ts"]
+  hub_origin:
+    value: 31
+    source: "design/gdd/factory-systems.md#world-generation"
+    referenced_by: ["src/core/data.ts", "src/game/world.ts", "src/game/save.ts"]
+  hub_size:
+    value: 3
+    source: "design/gdd/factory-systems.md#world-generation"
+    referenced_by: ["src/core/data.ts", "src/game/world.ts"]
+  hub_plaza_half_extent:
+    value: 4
+    source: "design/gdd/factory-systems.md#world-generation"
+    referenced_by: ["src/game/world.ts"]
+  geo_bonus:
+    value: 0.35
+    source: "design/gdd/factory-systems.md#power-grid"
+    referenced_by: ["src/game/world.ts", "src/game/simulation.ts", "src/game/progression.ts"]
+  day_ratio_threshold:
+    value: 0.70
+    source: "design/gdd/factory-systems.md#power-grid"
+    referenced_by: ["src/game/power.ts", "src/ui/hud.ts"]
+  solar_active_threshold:
+    value: 0.02
+    source: "design/gdd/factory-systems.md#power-grid"
+    referenced_by: ["src/game/power.ts"]
+  idle_power_fraction:
+    value: 0.05
+    source: "design/gdd/factory-systems.md#power-grid"
+    referenced_by: ["src/game/power.ts"]
+  overclock_exponent:
+    value: 1.6
+    source: "design/gdd/factory-systems.md#power-grid"
+    referenced_by: ["src/game/power.ts", "src/ui/hud.ts"]
+  overclock_min:
+    value: 0.5
+    source: "design/gdd/factory-systems.md#power-grid"
+    referenced_by: ["src/game/power.ts", "src/game/world.ts", "src/game/blueprints.ts"]
+  overclock_max:
+    value: 2.5
+    source: "design/gdd/factory-systems.md#power-grid"
+    referenced_by: ["src/game/world.ts", "src/game/blueprints.ts", "src/game/save.ts"]
+  overclock_step:
+    value: 0.05
+    source: "design/gdd/factory-systems.md#power-grid"
+    referenced_by: ["src/game/world.ts"]
+  rocket_timer_sec:
+    value: 4.5
+    source: "design/gdd/factory-systems.md#tech-orbital-progression"
+    referenced_by: ["src/game/progression.ts", "src/render/renderer.ts"]
+  telemetry_buckets:
+    value: 60
+    source: "design/gdd/factory-systems.md#tech-orbital-progression"
+    referenced_by: ["src/game/world.ts", "src/game/progression.ts", "src/game/save.ts"]
+  belt_max_slots:
+    value: 2
+    source: "design/gdd/factory-systems.md#logistics-transport"
+    referenced_by: ["src/game/simulation.ts", "src/game/save.ts"]
+  belt_slot_spacing:
+    value: 0.5
+    source: "design/gdd/factory-systems.md#logistics-transport"
+    referenced_by: ["src/game/simulation.ts"]
+  tunnel_unpaired_buffer_cap:
+    value: 4
+    source: "design/gdd/factory-systems.md#logistics-transport"
+    referenced_by: ["src/game/simulation.ts"]
+  tunnel_paired_queue_cap:
+    value: 10
+    source: "design/gdd/factory-systems.md#logistics-transport"
+    referenced_by: ["src/game/simulation.ts", "src/game/save.ts"]
+  tunnel_slot_spacing:
+    value: 0.25
+    source: "design/gdd/factory-systems.md#logistics-transport"
+    referenced_by: ["src/game/simulation.ts"]
+  miner_output_cap:
+    value: 10
+    source: "design/gdd/factory-systems.md#production-crafting"
+    referenced_by: ["src/game/simulation.ts"]
+  processor_output_cap:
+    value: 20
+    source: "design/gdd/factory-systems.md#production-crafting"
+    referenced_by: ["src/game/simulation.ts"]
+  coal_gen_buffer_cap:
+    value: 10
+    source: "design/gdd/factory-systems.md#power-grid"
+    referenced_by: ["src/game/simulation.ts"]
+  research_lab_buffer_cap:
+    value: 20
+    source: "design/gdd/factory-systems.md#tech-orbital-progression"
+    referenced_by: ["src/game/simulation.ts"]
+  research_lab_science_mult:
+    value: 2
+    source: "design/gdd/factory-systems.md#tech-orbital-progression"
+    referenced_by: ["src/game/progression.ts"]
+  orbital_overdrive_mult:
+    value: 1.5
+    source: "design/gdd/factory-systems.md#power-grid"
+    referenced_by: ["src/game/simulation.ts", "src/game/progression.ts"]
+  starter_stockpile:
+    value:
+      iron_plate: 60
+      copper_wire: 30
+      iron_gear: 25
+      concrete: 20
+      coal: 10
+    source: "design/gdd/factory-systems.md#world-generation"
+    referenced_by: ["src/game/world.ts"]
+
+entities:
+  belt_mk1:
+    id: belt_mk1
+    kind: building
+    category: logistics
+    tier: 0
+    size: 1
+    speed: 2.0
+    power_mw: 0
+    generates_mw: 0
+    cost: [{ item: iron_plate, count: 1 }]
+    source: "design/gdd/factory-systems.md#logistics-transport"
+    referenced_by: ["data/factory_buildings.json", "src/game/simulation.ts", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  belt_mk2:
+    id: belt_mk2
+    kind: building
+    category: logistics
+    tier: 1
+    size: 1
+    speed: 4.0
+    power_mw: 0
+    generates_mw: 0
+    cost: [{ item: iron_plate, count: 2 }, { item: iron_gear, count: 1 }]
+    source: "design/gdd/factory-systems.md#logistics-transport"
+    referenced_by: ["data/factory_buildings.json", "src/game/simulation.ts", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  belt_mk3:
+    id: belt_mk3
+    kind: building
+    category: logistics
+    tier: 4
+    size: 1
+    speed: 8.0
+    power_mw: 0
+    generates_mw: 0
+    cost: [{ item: steel_beam, count: 2 }, { item: circuit, count: 2 }]
+    source: "design/gdd/factory-systems.md#logistics-transport"
+    referenced_by: ["data/factory_buildings.json", "src/game/simulation.ts", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  tunnel:
+    id: tunnel
+    kind: building
+    category: logistics
+    tier: 1
+    size: 1
+    speed: 4.0
+    max_span: 5
+    power_mw: 0
+    generates_mw: 0
+    cost: [{ item: iron_plate, count: 4 }, { item: iron_gear, count: 2 }]
+    source: "design/gdd/factory-systems.md#logistics-transport"
+    referenced_by: ["data/factory_buildings.json", "src/game/world.ts", "src/game/simulation.ts", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  splitter:
+    id: splitter
+    kind: building
+    category: logistics
+    tier: 1
+    size: 1
+    speed: 8.0
+    power_mw: 0
+    generates_mw: 0
+    cost: [{ item: iron_plate, count: 4 }, { item: copper_wire, count: 2 }]
+    source: "design/gdd/factory-systems.md#logistics-transport"
+    referenced_by: ["data/factory_buildings.json", "src/game/simulation.ts", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  merger:
+    id: merger
+    kind: building
+    category: logistics
+    tier: 1
+    size: 1
+    speed: 8.0
+    power_mw: 0
+    generates_mw: 0
+    cost: [{ item: iron_plate, count: 4 }, { item: iron_gear, count: 2 }]
+    source: "design/gdd/factory-systems.md#logistics-transport"
+    referenced_by: ["data/factory_buildings.json", "src/game/simulation.ts", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  inserter:
+    id: inserter
+    kind: building
+    category: logistics
+    tier: 1
+    size: 1
+    speed: 1.5
+    power_mw: 0.4
+    generates_mw: 0
+    cost: [{ item: iron_plate, count: 2 }, { item: iron_gear, count: 2 }, { item: copper_wire, count: 1 }]
+    source: "design/gdd/factory-systems.md#logistics-transport"
+    referenced_by: ["data/factory_buildings.json", "src/game/power.ts", "src/game/simulation.ts", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  storage:
+    id: storage
+    kind: building
+    category: logistics
+    tier: 0
+    size: 1
+    capacity: 200
+    power_mw: 0
+    generates_mw: 0
+    cost: [{ item: iron_plate, count: 6 }, { item: concrete, count: 2 }]
+    source: "design/gdd/factory-systems.md#logistics-transport"
+    referenced_by: ["data/factory_buildings.json", "src/game/simulation.ts", "src/game/world.ts", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  miner_mk1:
+    id: miner_mk1
+    kind: building
+    category: extraction
+    tier: 0
+    size: 1
+    speed: 0.75
+    power_mw: 2.0
+    generates_mw: 0
+    requires_resource: ore
+    cost: [{ item: iron_plate, count: 6 }, { item: iron_gear, count: 3 }, { item: copper_wire, count: 2 }]
+    source: "design/gdd/factory-systems.md#production-crafting"
+    referenced_by: ["data/factory_buildings.json", "src/game/simulation.ts", "src/game/power.ts", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  miner_mk2:
+    id: miner_mk2
+    kind: building
+    category: extraction
+    tier: 4
+    size: 1
+    speed: 1.8
+    power_mw: 5.0
+    generates_mw: 0
+    requires_resource: ore
+    cost: [{ item: steel_beam, count: 4 }, { item: rotor, count: 2 }, { item: processor, count: 2 }]
+    source: "design/gdd/factory-systems.md#production-crafting"
+    referenced_by: ["data/factory_buildings.json", "src/game/simulation.ts", "src/game/power.ts", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  smelter:
+    id: smelter
+    kind: building
+    category: production
+    tier: 0
+    size: 1
+    speed: 1.0
+    power_mw: 3.0
+    generates_mw: 0
+    cost: [{ item: iron_plate, count: 5 }, { item: concrete, count: 4 }]
+    source: "design/gdd/factory-systems.md#production-crafting"
+    referenced_by: ["data/factory_buildings.json", "src/game/simulation.ts", "src/game/power.ts", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  constructor:
+    id: constructor
+    kind: building
+    category: production
+    tier: 0
+    size: 1
+    speed: 1.0
+    power_mw: 4.0
+    generates_mw: 0
+    cost: [{ item: iron_plate, count: 6 }, { item: iron_gear, count: 3 }, { item: copper_wire, count: 4 }]
+    source: "design/gdd/factory-systems.md#production-crafting"
+    referenced_by: ["data/factory_buildings.json", "src/game/simulation.ts", "src/game/power.ts", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  foundry:
+    id: foundry
+    kind: building
+    category: production
+    tier: 2
+    size: 1
+    speed: 1.0
+    power_mw: 8.0
+    generates_mw: 0
+    cost: [{ item: iron_plate, count: 8 }, { item: concrete, count: 6 }, { item: iron_gear, count: 4 }]
+    source: "design/gdd/factory-systems.md#production-crafting"
+    referenced_by: ["data/factory_buildings.json", "src/game/simulation.ts", "src/game/power.ts", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  assembler:
+    id: assembler
+    kind: building
+    category: production
+    tier: 3
+    size: 1
+    speed: 1.0
+    power_mw: 12.0
+    generates_mw: 0
+    cost: [{ item: steel_beam, count: 4 }, { item: rotor, count: 3 }, { item: circuit, count: 4 }, { item: concrete, count: 6 }]
+    source: "design/gdd/factory-systems.md#production-crafting"
+    referenced_by: ["data/factory_buildings.json", "src/game/simulation.ts", "src/game/power.ts", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  coal_generator:
+    id: coal_generator
+    kind: building
+    category: power
+    tier: 2
+    size: 1
+    power_mw: 0
+    generates_mw: 25.0
+    fuel_burn_seconds: 4.0
+    cost: [{ item: iron_plate, count: 8 }, { item: concrete, count: 5 }, { item: copper_wire, count: 6 }]
+    source: "design/gdd/factory-systems.md#power-grid"
+    referenced_by: ["data/factory_buildings.json", "src/game/power.ts", "src/game/simulation.ts", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  solar_panel:
+    id: solar_panel
+    kind: building
+    category: power
+    tier: 3
+    size: 1
+    power_mw: 0
+    generates_mw: 14.0
+    cost: [{ item: steel_beam, count: 3 }, { item: glass_crystal, count: 4 }, { item: circuit, count: 2 }]
+    source: "design/gdd/factory-systems.md#power-grid"
+    referenced_by: ["data/factory_buildings.json", "src/game/power.ts", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  accumulator:
+    id: accumulator
+    kind: building
+    category: power
+    tier: 3
+    size: 1
+    power_mw: 0
+    generates_mw: 0
+    energy_capacity_mj: 180.0
+    charge_rate_mw: 15.0
+    cost: [{ item: steel_beam, count: 2 }, { item: copper_wire, count: 6 }, { item: circuit, count: 2 }]
+    source: "design/gdd/factory-systems.md#power-grid"
+    referenced_by: ["data/factory_buildings.json", "src/game/power.ts", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  geothermal_plant:
+    id: geothermal_plant
+    kind: building
+    category: power
+    tier: 4
+    size: 1
+    power_mw: 0
+    generates_mw: 60.0
+    requires_resource: geothermal_vent
+    cost: [{ item: modular_frame, count: 3 }, { item: silicon_wafer, count: 4 }, { item: concrete, count: 10 }, { item: processor, count: 2 }]
+    source: "design/gdd/factory-systems.md#power-grid"
+    referenced_by: ["data/factory_buildings.json", "src/game/power.ts", "src/game/world.ts", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  research_lab:
+    id: research_lab
+    kind: building
+    category: special
+    tier: 2
+    size: 1
+    speed: 2.0
+    power_mw: 10.0
+    generates_mw: 0
+    cost: [{ item: iron_plate, count: 8 }, { item: glass_crystal, count: 4 }, { item: copper_wire, count: 8 }]
+    source: "design/gdd/factory-systems.md#tech-orbital-progression"
+    referenced_by: ["data/factory_buildings.json", "src/game/progression.ts", "src/game/simulation.ts", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  orbital_hub:
+    id: orbital_hub
+    kind: building
+    category: special
+    tier: 0
+    size: 3
+    power_mw: 0
+    generates_mw: 20.0
+    cost: []
+    source: "design/gdd/factory-systems.md#world-generation"
+    referenced_by: ["data/factory_buildings.json", "src/game/world.ts", "src/game/power.ts", "src/render/renderer.ts", "design/art/art-bible.md"]
+
+  geothermal_vent:
+    id: geothermal_vent
+    kind: terrain_feature
+    category: environment
+    tier: 0
+    size: 1
+    geo_bonus: 0.35
+    power_mw: 0
+    generates_mw: 0
+    source: "design/gdd/factory-systems.md#world-generation"
+    referenced_by: ["src/core/types.ts", "src/game/world.ts", "src/game/power.ts", "src/render/renderer.ts", "design/art/art-bible.md"]
+
+items:
+  iron_ore:
+    id: iron_ore
+    category: raw
+    tier: 0
+    fuel_value: 0
+    raw_ore_equiv: 1.0
+    color: "#6b88a8"
+    accent: "#9ebbd9"
+    source: "data/factory_items.json"
+    referenced_by: ["src/game/world.ts", "data/factory_recipes.json", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  copper_ore:
+    id: copper_ore
+    category: raw
+    tier: 0
+    fuel_value: 0
+    raw_ore_equiv: 1.0
+    color: "#c96d44"
+    accent: "#f19b6e"
+    source: "data/factory_items.json"
+    referenced_by: ["src/game/world.ts", "data/factory_recipes.json", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  coal:
+    id: coal
+    category: raw
+    tier: 0
+    fuel_value: 100
+    raw_ore_equiv: 1.0
+    color: "#2f333a"
+    accent: "#575e6b"
+    source: "data/factory_items.json"
+    referenced_by: ["src/game/world.ts", "src/game/power.ts", "data/factory_recipes.json", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  stone:
+    id: stone
+    category: raw
+    tier: 0
+    fuel_value: 0
+    raw_ore_equiv: 1.0
+    color: "#878b91"
+    accent: "#b8bcc2"
+    source: "data/factory_items.json"
+    referenced_by: ["src/game/world.ts", "data/factory_recipes.json", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  quartz:
+    id: quartz
+    category: raw
+    tier: 1
+    fuel_value: 0
+    raw_ore_equiv: 1.0
+    color: "#9b6bc9"
+    accent: "#dab6ff"
+    source: "data/factory_items.json"
+    referenced_by: ["src/game/world.ts", "data/factory_recipes.json", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  iron_ingot:
+    id: iron_ingot
+    category: refined
+    tier: 1
+    fuel_value: 0
+    raw_ore_equiv: 1.0
+    color: "#98a9bc"
+    accent: "#dce8f5"
+    source: "data/factory_items.json"
+    referenced_by: ["data/factory_recipes.json", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  copper_ingot:
+    id: copper_ingot
+    category: refined
+    tier: 1
+    fuel_value: 0
+    raw_ore_equiv: 1.0
+    color: "#d97848"
+    accent: "#ffc099"
+    source: "data/factory_items.json"
+    referenced_by: ["data/factory_recipes.json", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  concrete:
+    id: concrete
+    category: refined
+    tier: 1
+    fuel_value: 0
+    raw_ore_equiv: 2.0
+    color: "#9ca3ad"
+    accent: "#cfd6e0"
+    source: "data/factory_items.json"
+    referenced_by: ["data/factory_recipes.json", "data/factory_buildings.json", "data/factory_techs.json", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  glass_crystal:
+    id: glass_crystal
+    category: refined
+    tier: 2
+    fuel_value: 0
+    raw_ore_equiv: 1.0
+    color: "#73d2de"
+    accent: "#cff9ff"
+    source: "data/factory_items.json"
+    referenced_by: ["data/factory_recipes.json", "data/factory_buildings.json", "data/factory_techs.json", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  steel_beam:
+    id: steel_beam
+    category: refined
+    tier: 2
+    fuel_value: 0
+    raw_ore_equiv: 3.0
+    color: "#5f7082"
+    accent: "#a4b8cc"
+    source: "data/factory_items.json"
+    referenced_by: ["data/factory_recipes.json", "data/factory_buildings.json", "data/factory_techs.json", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  silicon_wafer:
+    id: silicon_wafer
+    category: refined
+    tier: 3
+    fuel_value: 0
+    raw_ore_equiv: 2.0
+    color: "#445d8a"
+    accent: "#8cb3f5"
+    source: "data/factory_items.json"
+    referenced_by: ["data/factory_recipes.json", "data/factory_buildings.json", "data/factory_techs.json", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  iron_plate:
+    id: iron_plate
+    category: manufactured
+    tier: 1
+    fuel_value: 0
+    raw_ore_equiv: 1.0
+    color: "#7b91a8"
+    accent: "#c6daed"
+    source: "data/factory_items.json"
+    referenced_by: ["data/factory_recipes.json", "data/factory_buildings.json", "data/factory_techs.json", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  iron_gear:
+    id: iron_gear
+    category: manufactured
+    tier: 1
+    fuel_value: 0
+    raw_ore_equiv: 2.0
+    color: "#8c9fb3"
+    accent: "#dde7f0"
+    source: "data/factory_items.json"
+    referenced_by: ["data/factory_recipes.json", "data/factory_buildings.json", "data/factory_techs.json", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  copper_wire:
+    id: copper_wire
+    category: manufactured
+    tier: 1
+    fuel_value: 0
+    raw_ore_equiv: 0.5
+    color: "#e37e44"
+    accent: "#ffbe94"
+    source: "data/factory_items.json"
+    referenced_by: ["data/factory_recipes.json", "data/factory_buildings.json", "data/factory_techs.json", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  circuit:
+    id: circuit
+    category: manufactured
+    tier: 2
+    fuel_value: 0
+    raw_ore_equiv: 2.0
+    color: "#2f9e62"
+    accent: "#6df2a7"
+    source: "data/factory_items.json"
+    referenced_by: ["data/factory_recipes.json", "data/factory_buildings.json", "data/factory_techs.json", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  rotor:
+    id: rotor
+    category: manufactured
+    tier: 2
+    fuel_value: 0
+    raw_ore_equiv: 6.0
+    color: "#d48a28"
+    accent: "#ffd07a"
+    source: "data/factory_items.json"
+    referenced_by: ["data/factory_recipes.json", "data/factory_buildings.json", "data/factory_techs.json", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  modular_frame:
+    id: modular_frame
+    category: manufactured
+    tier: 3
+    fuel_value: 0
+    raw_ore_equiv: 12.0
+    color: "#58708a"
+    accent: "#9ec3e8"
+    source: "data/factory_items.json"
+    referenced_by: ["data/factory_recipes.json", "data/factory_buildings.json", "data/factory_techs.json", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  processor:
+    id: processor
+    category: manufactured
+    tier: 4
+    fuel_value: 0
+    raw_ore_equiv: 6.0
+    color: "#1c78c0"
+    accent: "#66c7ff"
+    source: "data/factory_items.json"
+    referenced_by: ["data/factory_recipes.json", "data/factory_techs.json", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+  quantum_core:
+    id: quantum_core
+    category: manufactured
+    tier: 5
+    fuel_value: 0
+    raw_ore_equiv: 24.0
+    color: "#8b3dff"
+    accent: "#4ef2ff"
+    source: "data/factory_items.json"
+    referenced_by: ["data/factory_recipes.json", "data/factory_techs.json", "src/render/sprites.ts", "design/art/art-bible.md"]
+
+recipes:
+  smelt_iron:
+    building: smelter
+    inputs: [{ item: iron_ore, count: 1 }]
+    outputs: [{ item: iron_ingot, count: 1 }]
+    duration: 1.5
+  smelt_copper:
+    building: smelter
+    inputs: [{ item: copper_ore, count: 1 }]
+    outputs: [{ item: copper_ingot, count: 1 }]
+    duration: 1.5
+  kiln_concrete:
+    building: smelter
+    inputs: [{ item: stone, count: 2 }]
+    outputs: [{ item: concrete, count: 1 }]
+    duration: 2.0
+  smelt_glass:
+    building: smelter
+    inputs: [{ item: quartz, count: 1 }]
+    outputs: [{ item: glass_crystal, count: 1 }]
+    duration: 2.0
+  press_plate:
+    building: constructor
+    inputs: [{ item: iron_ingot, count: 1 }]
+    outputs: [{ item: iron_plate, count: 1 }]
+    duration: 1.0
+  cut_gear:
+    building: constructor
+    inputs: [{ item: iron_ingot, count: 2 }]
+    outputs: [{ item: iron_gear, count: 1 }]
+    duration: 1.5
+  draw_wire:
+    building: constructor
+    inputs: [{ item: copper_ingot, count: 1 }]
+    outputs: [{ item: copper_wire, count: 2 }]
+    duration: 1.0
+  forge_steel:
+    building: foundry
+    inputs: [{ item: iron_ingot, count: 2 }, { item: coal, count: 1 }]
+    outputs: [{ item: steel_beam, count: 1 }]
+    duration: 2.5
+  dope_silicon:
+    building: foundry
+    inputs: [{ item: glass_crystal, count: 1 }, { item: coal, count: 1 }]
+    outputs: [{ item: silicon_wafer, count: 1 }]
+    duration: 2.0
+  assemble_circuit:
+    building: assembler
+    inputs: [{ item: iron_plate, count: 1 }, { item: copper_wire, count: 2 }]
+    outputs: [{ item: circuit, count: 1 }]
+    duration: 2.0
+  assemble_rotor:
+    building: assembler
+    inputs: [{ item: iron_plate, count: 2 }, { item: iron_gear, count: 2 }]
+    outputs: [{ item: rotor, count: 1 }]
+    duration: 2.5
+  assemble_frame:
+    building: assembler
+    inputs: [{ item: steel_beam, count: 2 }, { item: rotor, count: 1 }]
+    outputs: [{ item: modular_frame, count: 1 }]
+    duration: 3.5
+  assemble_processor:
+    building: assembler
+    inputs: [{ item: circuit, count: 2 }, { item: silicon_wafer, count: 1 }]
+    outputs: [{ item: processor, count: 1 }]
+    duration: 3.5
+    required_tech: tier_4_overclock
+  assemble_quantum:
+    building: assembler
+    inputs: [{ item: modular_frame, count: 1 }, { item: processor, count: 2 }]
+    outputs: [{ item: quantum_core, count: 1 }]
+    duration: 5.0
+    required_tech: tier_5_quantum
+
+formulas:
+  belt_throughput:
+    expression: "TICK_HZ / ceil(belt_slot_spacing / min(1.0, base_belt_speed * belt_speed_mult * overdrive_mult * DT))"
+    variables: ["base_belt_speed", "belt_speed_mult", "overdrive_mult", "DT", "TICK_HZ", "belt_slot_spacing"]
+    output_range: "2.0..20.0 items/s"
+    source: "design/gdd/factory-systems.md#1-belt--splittermerger-throughput-belt_throughput"
+    referenced_by: ["src/game/simulation.ts", "tests/unit/logistics.test.ts"]
+
+  tunnel_transit:
+    expression: "base_tunnel_speed * belt_speed_mult * overdrive_mult * DT"
+    variables: ["base_tunnel_speed", "belt_speed_mult", "overdrive_mult", "DT", "tunnel_slot_spacing"]
+    output_range: "0.10..1.0 progress/tick (4.0..20.0 items/s)"
+    source: "design/gdd/factory-systems.md#2-underground-tunnel-transit-tunnel_transit"
+    referenced_by: ["src/game/simulation.ts", "tests/unit/logistics.test.ts"]
+
+  miner_extraction:
+    expression: "base_miner_speed * clock * (1 + geo_bonus) * mining_speed_mult * overdrive_mult * satisfaction"
+    variables: ["base_miner_speed", "clock", "geo_bonus", "mining_speed_mult", "overdrive_mult", "satisfaction"]
+    output_range: "0.0..45.56 ores/s"
+    source: "design/gdd/factory-systems.md#3-mining-extraction-rate-miner_extraction"
+    referenced_by: ["src/game/simulation.ts", "tests/unit/production.test.ts"]
+
+  machine_craft_rate:
+    expression: "(1 / recipe_seconds) * clock * (1 + geo_bonus) * craft_speed_mult * overdrive_mult * satisfaction"
+    variables: ["recipe_seconds", "clock", "geo_bonus", "craft_speed_mult", "overdrive_mult", "satisfaction"]
+    output_range: "0.0..25.31 crafts/s"
+    source: "design/gdd/factory-systems.md#4-overclock-power--cycle-speed-overclock_power-machine_craft_rate"
+    referenced_by: ["src/game/simulation.ts", "tests/unit/production.test.ts"]
+
+  overclock_power:
+    expression: "is_active ? base_power_mw * (clock ^ 1.6) : base_power_mw * 0.05"
+    variables: ["base_power_mw", "clock", "is_active", "idle_power_fraction", "overclock_exponent"]
+    output_range: "0.02..51.96 MW"
+    source: "design/gdd/factory-systems.md#4-overclock-power--cycle-speed-overclock_power-machine_craft_rate"
+    referenced_by: ["src/game/power.ts", "src/ui/hud.ts", "tests/unit/power-tech.test.ts"]
+
+  solar_factor:
+    expression: "day_ratio < 0.70 ? sin(pi * (day_ratio / 0.70)) : 0"
+    variables: ["day_ratio", "day_ratio_threshold"]
+    output_range: "0.0..1.0"
+    source: "design/gdd/factory-systems.md#5-grid-satisfaction-solar-factor--accumulator-balance-solar_factor-grid_satisfaction"
+    referenced_by: ["src/game/power.ts", "tests/unit/power-tech.test.ts"]
+
+  grid_satisfaction:
+    expression: "demanded_mw > 0 ? min(1.0, (generated_mw + discharge_mw) / demanded_mw) : 1.0"
+    variables: ["generated_mw", "discharge_mw", "demanded_mw"]
+    output_range: "0.0..1.0"
+    source: "design/gdd/factory-systems.md#5-grid-satisfaction-solar-factor--accumulator-balance-solar_factor-grid_satisfaction"
+    referenced_by: ["src/game/power.ts", "src/game/simulation.ts", "tests/unit/power-tech.test.ts"]
+
+  lab_research_rate:
+    expression: "base_lab_speed * clock * (1 + geo_bonus) * craft_speed_mult * overdrive_mult * satisfaction"
+    variables: ["base_lab_speed", "clock", "geo_bonus", "craft_speed_mult", "overdrive_mult", "satisfaction"]
+    output_range: "0.0..50.625 cycles/s (2x science per item)"
+    source: "design/gdd/factory-systems.md#7-research-lab-science-rate-lab_research_rate"
+    referenced_by: ["src/game/progression.ts", "tests/unit/power-tech.test.ts"]
+
+audio_events:
+  - ui_tick
+  - ui_error
+  - ui_modal_open
+  - ui_modal_close
+  - ui_save
+  - build_place
+  - build_rotate
+  - build_remove
+  - belt_drag_step
+  - mine_hit
+  - bp_copy
+  - bp_stamp
+  - hub_load
+  - tech_unlock
+  - rocket_launch
+  - victory_fanfare
+  - power_brownout
+  - power_restored
+  - sim_pause
+  - alt_mode
+
+techs:
+  tier_1_logistics:
+    tier: 1
+    prerequisites: []
+    cost: [{ item: iron_plate, count: 25 }, { item: copper_wire, count: 20 }]
+    unlocks_buildings: [belt_mk2, tunnel, splitter, merger, inserter]
+    unlocks_features: []
+  tier_2_metallurgy:
+    tier: 2
+    prerequisites: [tier_1_logistics]
+    cost: [{ item: iron_plate, count: 40 }, { item: iron_gear, count: 25 }, { item: concrete, count: 20 }]
+    unlocks_buildings: [foundry, coal_generator, research_lab]
+    unlocks_features: []
+  tier_3_electronics:
+    tier: 3
+    prerequisites: [tier_2_metallurgy]
+    cost: [{ item: steel_beam, count: 35 }, { item: glass_crystal, count: 30 }, { item: copper_wire, count: 60 }, { item: concrete, count: 20 }]
+    unlocks_buildings: [assembler, solar_panel, accumulator]
+    unlocks_features: [blueprints]
+  tier_4_overclock:
+    tier: 4
+    prerequisites: [tier_3_electronics]
+    cost: [{ item: circuit, count: 30 }, { item: rotor, count: 20 }, { item: steel_beam, count: 30 }]
+    unlocks_buildings: [belt_mk3, miner_mk2, geothermal_plant]
+    unlocks_features: [overclock]
+  tier_5_quantum:
+    tier: 5
+    prerequisites: [tier_4_overclock]
+    cost: [{ item: modular_frame, count: 20 }, { item: silicon_wafer, count: 25 }, { item: circuit, count: 40 }]
+    unlocks_buildings: []
+    unlocks_features: [quantum_recipes]
+  orbital_ascension:
+    tier: 6
+    prerequisites: [tier_5_quantum]
+    cost: [{ item: processor, count: 25 }, { item: quantum_core, count: 10 }]
+    unlocks_buildings: []
+    unlocks_features: [orbital_overdrive]
+
+orbital_phases:
+  phase_1:
+    phase: 1
+    requirements: [{ item: iron_plate, count: 40 }, { item: iron_gear, count: 20 }, { item: copper_wire, count: 40 }, { item: concrete, count: 20 }]
+  phase_2:
+    phase: 2
+    requirements: [{ item: steel_beam, count: 35 }, { item: glass_crystal, count: 25 }, { item: rotor, count: 20 }, { item: circuit, count: 25 }]
+  phase_3:
+    phase: 3
+    requirements: [{ item: modular_frame, count: 25 }, { item: circuit, count: 50 }, { item: concrete, count: 60 }]
+  phase_4:
+    phase: 4
+    requirements: [{ item: silicon_wafer, count: 40 }, { item: processor, count: 30 }, { item: modular_frame, count: 35 }, { item: concrete, count: 80 }]
+  phase_5:
+    phase: 5
+    requirements: [{ item: quantum_core, count: 30 }, { item: processor, count: 50 }, { item: steel_beam, count: 100 }, { item: concrete, count: 100 }]
+

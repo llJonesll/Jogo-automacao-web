@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aetherforge.local/schemas/factory_buildings.schema.json",
+  "title": "AETHERFORGE Factory Buildings Catalog",
+  "description": "Schema for data/factory_buildings.json mapping snake_case BuildingId keys to building definitions.",
+  "type": "object",
+  "minProperties": 1,
+  "additionalProperties": false,
+  "patternProperties": {
+    "^[a-z0-9_]+$": {
+      "$ref": "#/$defs/building_def"
+    }
+  },
+  "$defs": {
+    "item_stack": {
+      "type": "object",
+      "required": ["item", "count"],
+      "additionalProperties": false,
+      "properties": {
+        "item": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+        "count": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "building_def": {
+      "type": "object",
+      "required": ["id", "category", "size", "tier", "power_mw", "generates_mw", "cost"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+        "category": {
+          "type": "string",
+          "enum": ["logistics", "extraction", "production", "power", "special"]
+        },
+        "size": { "type": "integer", "minimum": 1, "maximum": 3 },
+        "tier": { "type": "integer", "minimum": 0, "maximum": 6 },
+        "speed": { "type": "number", "exclusiveMinimum": 0 },
+        "max_span": { "type": "integer", "minimum": 1, "maximum": 16 },
+        "capacity": { "type": "integer", "minimum": 1 },
+        "power_mw": { "type": "number", "minimum": 0 },
+        "generates_mw": { "type": "number", "minimum": 0 },
+        "energy_capacity_mj": { "type": "number", "exclusiveMinimum": 0 },
+        "charge_rate_mw": { "type": "number", "exclusiveMinimum": 0 },
+        "fuel_burn_seconds": { "type": "number", "exclusiveMinimum": 0 },
+        "requires_resource": { "type": "string", "enum": ["ore", "geothermal_vent"] },
+        "cost": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/item_stack" }
+        }
+      }
+    }
+  }
+}

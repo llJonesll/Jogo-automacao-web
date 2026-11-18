@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aetherforge.local/schemas/factory_recipes.schema.json",
+  "title": "AETHERFORGE Factory Recipes Catalog",
+  "description": "Schema for data/factory_recipes.json mapping snake_case RecipeId keys to processing recipes.",
+  "type": "object",
+  "minProperties": 1,
+  "additionalProperties": false,
+  "patternProperties": {
+    "^[a-z0-9_]+$": {
+      "$ref": "#/$defs/recipe_def"
+    }
+  },
+  "$defs": {
+    "item_stack": {
+      "type": "object",
+      "required": ["item", "count"],
+      "additionalProperties": false,
+      "properties": {
+        "item": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+        "count": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "recipe_def": {
+      "type": "object",
+      "required": ["id", "building", "inputs", "outputs", "duration"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+        "building": {
+          "type": "string",
+          "enum": ["smelter", "constructor", "foundry", "assembler"]
+        },
+        "inputs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/item_stack" }
+        },
+        "outputs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/item_stack" }
+        },
+        "duration": { "type": "number", "exclusiveMinimum": 0 },
+        "required_tech": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+        "allow_auto": { "type": "boolean" }
+      }
+    }
+  }
+}
