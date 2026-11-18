@@ -785,7 +785,7 @@ techs:
     prerequisites: [tier_2_metallurgy]
     cost: [{ item: steel_beam, count: 35 }, { item: glass_crystal, count: 30 }, { item: copper_wire, count: 60 }, { item: concrete, count: 20 }]
     unlocks_buildings: [assembler, solar_panel, accumulator]
-    unlocks_features: [blueprints]
+    unlocks_features: []
   tier_4_overclock:
     tier: 4
     prerequisites: [tier_3_electronics]

@@ -4,6 +4,11 @@ import rawBuildings from '../../data/factory_buildings.json';
 import rawItems from '../../data/factory_items.json';
 import rawRecipes from '../../data/factory_recipes.json';
 import rawTechs from '../../data/factory_techs.json';
+import configSchema from '../../data/schemas/config.schema.json';
+import buildingsSchema from '../../data/schemas/factory_buildings.schema.json';
+import itemsSchema from '../../data/schemas/factory_items.schema.json';
+import recipesSchema from '../../data/schemas/factory_recipes.schema.json';
+import techsSchema from '../../data/schemas/factory_techs.schema.json';
 import {
   BUILDING_IDS,
   BUILDING_STATUS_TRANSITIONS,
@@ -27,6 +32,137 @@ import { createWorld, isHubTile, tileIndex } from '../../src/game/world';
 import { getBundle } from '../../src/ui/i18n';
 
 const SNAKE_CASE_RE = /^[a-z][a-z0-9_]*$/;
+const ALL_STATUSES: readonly BuildingStatus[] = [
+  'working',
+  'idle',
+  'no_power',
+  'input_starved',
+  'output_full',
+  'no_resource',
+  'unpaired',
+];
+const ACTIVE_FEATURE_GATES = new Set(['overclock', 'quantum_recipes', 'orbital_overdrive']);
+
+type JsonSchemaNode = {
+  $ref?: string;
+  $defs?: Record<string, JsonSchemaNode>;
+  type?: string;
+  required?: string[];
+  additionalProperties?: boolean;
+  properties?: Record<string, JsonSchemaNode>;
+  patternProperties?: Record<string, JsonSchemaNode>;
+  enum?: unknown[];
+  pattern?: string;
+  minimum?: number;
+  maximum?: number;
+  exclusiveMinimum?: number;
+  minLength?: number;
+  minItems?: number;
+  minProperties?: number;
+  items?: JsonSchemaNode;
+};
+
+function resolveRef(root: JsonSchemaNode, ref: string): JsonSchemaNode {
+  const prefix = '#/$defs/';
+  if (!ref.startsWith(prefix) || !root.$defs) {
+    throw new Error(`Unsupported schema ref: ${ref}`);
+  }
+  const key = ref.slice(prefix.length);
+  const target = root.$defs[key];
+  if (!target) {
+    throw new Error(`Missing schema $def: ${key}`);
+  }
+  return target;
+}
+
+function assertMatchesJsonSchema(
+  value: unknown,
+  node: JsonSchemaNode,
+  root: JsonSchemaNode,
+  path = '$'
+): void {
+  if (node.$ref) {
+    assertMatchesJsonSchema(value, resolveRef(root, node.$ref), root, path);
+    return;
+  }
+
+  if (node.enum) {
+    expect(node.enum, `${path} enum`).toContain(value);
+  }
+
+  if (node.type === 'object') {
+    expect(value !== null && typeof value === 'object' && !Array.isArray(value), `${path} object`).toBe(
+      true
+    );
+    const obj = value as Record<string, unknown>;
+    const keys = Object.keys(obj);
+    if (node.minProperties !== undefined) {
+      expect(keys.length, `${path} minProperties`).toBeGreaterThanOrEqual(node.minProperties);
+    }
+    if (node.required) {
+      for (const req of node.required) {
+        expect(Object.prototype.hasOwnProperty.call(obj, req), `${path}.${req} required`).toBe(
+          true
+        );
+      }
+    }
+    const patternEntries = node.patternProperties
+      ? Object.entries(node.patternProperties).map(([pat, sub]) => [new RegExp(pat), sub] as const)
+      : [];
+    for (const k of keys) {
+      const propSchema = node.properties?.[k];
+      if (propSchema) {
+        assertMatchesJsonSchema(obj[k], propSchema, root, `${path}.${k}`);
+        continue;
+      }
+      let matchedPattern = false;
+      for (const [re, sub] of patternEntries) {
+        if (re.test(k)) {
+          matchedPattern = true;
+          assertMatchesJsonSchema(obj[k], sub, root, `${path}.${k}`);
+        }
+      }
+      if (!matchedPattern && node.additionalProperties === false) {
+        throw new Error(`Unexpected additional property ${path}.${k}`);
+      }
+    }
+  } else if (node.type === 'array') {
+    expect(Array.isArray(value), `${path} array`).toBe(true);
+    const arr = value as unknown[];
+    if (node.minItems !== undefined) {
+      expect(arr.length, `${path} minItems`).toBeGreaterThanOrEqual(node.minItems);
+    }
+    if (node.items) {
+      for (let i = 0; i < arr.length; i++) {
+        assertMatchesJsonSchema(arr[i], node.items, root, `${path}[${i}]`);
+      }
+    }
+  } else if (node.type === 'string') {
+    expect(typeof value, `${path} string`).toBe('string');
+    const str = value as string;
+    if (node.minLength !== undefined) {
+      expect(str.length, `${path} minLength`).toBeGreaterThanOrEqual(node.minLength);
+    }
+    if (node.pattern) {
+      expect(str, `${path} pattern`).toMatch(new RegExp(node.pattern));
+    }
+  } else if (node.type === 'integer') {
+    expect(typeof value === 'number' && Number.isInteger(value), `${path} integer`).toBe(true);
+    const num = value as number;
+    if (node.minimum !== undefined) expect(num, `${path} min`).toBeGreaterThanOrEqual(node.minimum);
+    if (node.maximum !== undefined) expect(num, `${path} max`).toBeLessThanOrEqual(node.maximum);
+  } else if (node.type === 'number') {
+    expect(typeof value === 'number' && Number.isFinite(value), `${path} number`).toBe(true);
+    const num = value as number;
+    if (node.minimum !== undefined) expect(num, `${path} min`).toBeGreaterThanOrEqual(node.minimum);
+    if (node.maximum !== undefined) expect(num, `${path} max`).toBeLessThanOrEqual(node.maximum);
+    if (node.exclusiveMinimum !== undefined) {
+      expect(num, `${path} exclusiveMin`).toBeGreaterThan(node.exclusiveMinimum);
+    }
+  } else if (node.type === 'boolean') {
+    expect(typeof value, `${path} boolean`).toBe('boolean');
+  }
+}
 
 describe('data schemas, zero-orphan invariants, tech DAG, i18n parity, and worldgen', () => {
   it('enforces snake_case keys and valid config knob bounds across all data/*.json', () => {
@@ -132,6 +268,29 @@ describe('data schemas, zero-orphan invariants, tech DAG, i18n parity, and world
       expect(producedItems.has(id)).toBe(true);
       expect(consumedItems.has(id)).toBe(true);
     }
+
+    // Every unlocks_features token in factory_techs.json must map to an active enforced feature gate
+    for (const tech of TECHS) {
+      for (const feat of tech.unlocks_features) {
+        expect(ACTIVE_FEATURE_GATES.has(feat)).toBe(true);
+      }
+    }
+  });
+
+  it('validates all data/*.json files against data/schemas/*.schema.json structural rules', () => {
+    assertMatchesJsonSchema(rawConfig, configSchema as JsonSchemaNode, configSchema as JsonSchemaNode);
+    assertMatchesJsonSchema(rawItems, itemsSchema as JsonSchemaNode, itemsSchema as JsonSchemaNode);
+    assertMatchesJsonSchema(
+      rawBuildings,
+      buildingsSchema as JsonSchemaNode,
+      buildingsSchema as JsonSchemaNode
+    );
+    assertMatchesJsonSchema(
+      rawRecipes,
+      recipesSchema as JsonSchemaNode,
+      recipesSchema as JsonSchemaNode
+    );
+    assertMatchesJsonSchema(rawTechs, techsSchema as JsonSchemaNode, techsSchema as JsonSchemaNode);
   });
 
   it('verifies tech DAG acyclicity, monotonic Tier 2->3->6 cost curve, and status transition table', () => {
@@ -176,48 +335,99 @@ describe('data schemas, zero-orphan invariants, tech DAG, i18n parity, and world
       techOreCost('tier_3_electronics')
     );
 
-    const allStatuses: BuildingStatus[] = [
-      'working',
-      'idle',
-      'no_power',
-      'input_starved',
-      'output_full',
-      'no_resource',
-      'unpaired',
-    ];
-    for (const st of allStatuses) {
+    for (const st of ALL_STATUSES) {
       expect(BUILDING_STATUS_TRANSITIONS[st].length).toBeGreaterThan(0);
       expect(BUILDING_STATUS_TRANSITIONS[st]).toContain(st);
     }
   });
 
-  it('maintains 100% i18n parity between PT-BR and EN across items, buildings, recipes, techs, and phases', () => {
+  it('maintains 100% i18n key and entry parity between PT-BR and EN across items, buildings, recipes, techs, phases, statuses, and tweaks', () => {
     const pt = getBundle('pt-BR');
     const en = getBundle('en');
 
+    // Top-level bundle keys & nested key sets must match identically
+    expect(Object.keys(pt).sort()).toEqual(Object.keys(en).sort());
+    expect(Object.keys(pt.cb_modes).sort()).toEqual(Object.keys(en.cb_modes).sort());
+    expect(Object.keys(pt.bp_starter_names).sort()).toEqual(
+      Object.keys(en.bp_starter_names).sort()
+    );
+    expect(pt.help_lines.length).toBe(en.help_lines.length);
+    expect(pt.help_lines.length).toBeGreaterThanOrEqual(8);
+
+    // 19 items
+    expect(ITEM_IDS.length).toBe(19);
+    expect(Object.keys(pt.items).sort()).toEqual([...ITEM_IDS].sort());
+    expect(Object.keys(en.items).sort()).toEqual([...ITEM_IDS].sort());
     for (const id of ITEM_IDS) {
-      expect(pt.items[id]).toBeTruthy();
-      expect(en.items[id]).toBeTruthy();
+      expect(pt.items[id].trim().length).toBeGreaterThan(0);
+      expect(en.items[id].trim().length).toBeGreaterThan(0);
     }
+
+    // 20 buildings (name + desc)
+    expect(BUILDING_IDS.length).toBe(20);
+    expect(Object.keys(pt.buildings).sort()).toEqual([...BUILDING_IDS].sort());
+    expect(Object.keys(en.buildings).sort()).toEqual([...BUILDING_IDS].sort());
     for (const id of BUILDING_IDS) {
-      expect(pt.buildings[id]?.name).toBeTruthy();
-      expect(en.buildings[id]?.name).toBeTruthy();
+      expect(pt.buildings[id]?.name.trim().length).toBeGreaterThan(0);
+      expect(en.buildings[id]?.name.trim().length).toBeGreaterThan(0);
+      expect(pt.buildings[id]?.desc.trim().length).toBeGreaterThan(0);
+      expect(en.buildings[id]?.desc.trim().length).toBeGreaterThan(0);
     }
-    for (const id of Object.keys(RECIPES)) {
-      expect(pt.recipes[id]).toBeTruthy();
-      expect(en.recipes[id]).toBeTruthy();
+
+    // 14 recipes
+    const recipeKeys = Object.keys(RECIPES).sort();
+    expect(recipeKeys.length).toBe(14);
+    expect(Object.keys(pt.recipes).sort()).toEqual(recipeKeys);
+    expect(Object.keys(en.recipes).sort()).toEqual(recipeKeys);
+    for (const id of recipeKeys) {
+      expect(pt.recipes[id].trim().length).toBeGreaterThan(0);
+      expect(en.recipes[id].trim().length).toBeGreaterThan(0);
     }
-    for (const tech of TECHS) {
-      expect(pt.techs[tech.id]?.name).toBeTruthy();
-      expect(en.techs[tech.id]?.name).toBeTruthy();
+
+    // 6 techs (name + desc)
+    const techKeys = TECHS.map((t) => t.id).sort();
+    expect(techKeys.length).toBe(6);
+    expect(Object.keys(pt.techs).sort()).toEqual(techKeys);
+    expect(Object.keys(en.techs).sort()).toEqual(techKeys);
+    for (const id of techKeys) {
+      expect(pt.techs[id]?.name.trim().length).toBeGreaterThan(0);
+      expect(en.techs[id]?.name.trim().length).toBeGreaterThan(0);
+      expect(pt.techs[id]?.desc.trim().length).toBeGreaterThan(0);
+      expect(en.techs[id]?.desc.trim().length).toBeGreaterThan(0);
     }
-    for (const phase of ORBITAL_PHASES) {
-      expect(pt.phases[phase.id]).toBeTruthy();
-      expect(en.phases[phase.id]).toBeTruthy();
+
+    // 5 orbital phases
+    const phaseKeys = ORBITAL_PHASES.map((p) => p.id).sort();
+    expect(phaseKeys.length).toBe(5);
+    expect(Object.keys(pt.phases).sort()).toEqual(phaseKeys);
+    expect(Object.keys(en.phases).sort()).toEqual(phaseKeys);
+    for (const id of phaseKeys) {
+      expect(pt.phases[id].trim().length).toBeGreaterThan(0);
+      expect(en.phases[id].trim().length).toBeGreaterThan(0);
     }
-    for (const k of Object.keys(rawConfig)) {
-      expect(pt.tweak_descs[k]).toBeTruthy();
-      expect(en.tweak_descs[k]).toBeTruthy();
+
+    // 7 building statuses
+    const statusKeys = [...ALL_STATUSES].sort();
+    expect(statusKeys.length).toBe(7);
+    expect(Object.keys(pt.statuses).sort()).toEqual(statusKeys);
+    expect(Object.keys(en.statuses).sort()).toEqual(statusKeys);
+    for (const st of ALL_STATUSES) {
+      expect(pt.statuses[st].trim().length).toBeGreaterThan(0);
+      expect(en.statuses[st].trim().length).toBeGreaterThan(0);
+    }
+
+    // 7 config tweaks (labels + descs)
+    const configKeys = Object.keys(rawConfig).sort();
+    expect(configKeys.length).toBe(7);
+    expect(Object.keys(pt.tweak_labels).sort()).toEqual(configKeys);
+    expect(Object.keys(en.tweak_labels).sort()).toEqual(configKeys);
+    expect(Object.keys(pt.tweak_descs).sort()).toEqual(configKeys);
+    expect(Object.keys(en.tweak_descs).sort()).toEqual(configKeys);
+    for (const k of configKeys) {
+      expect(pt.tweak_labels[k].trim().length).toBeGreaterThan(0);
+      expect(en.tweak_labels[k].trim().length).toBeGreaterThan(0);
+      expect(pt.tweak_descs[k].trim().length).toBeGreaterThan(0);
+      expect(en.tweak_descs[k].trim().length).toBeGreaterThan(0);
     }
   });
 

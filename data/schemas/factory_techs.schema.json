@@ -63,7 +63,7 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["blueprints", "overclock", "quantum_recipes", "orbital_overdrive"]
+            "enum": ["overclock", "quantum_recipes", "orbital_overdrive"]
           }
         },
         "unlocks_recipes": {

@@ -1,8 +1,10 @@
 import {
+  BUILDING_IDS,
   BUILDINGS,
   DT,
   HUB_ORIGIN,
   HUB_SIZE,
+  ITEM_IDS,
   createDefaultConfig,
   isBeltType,
   rotateDirCW,
@@ -15,7 +17,7 @@ import type {
   SimulationAudioEvent,
   WorldState,
 } from './core/types';
-import { SoundEngine } from './audio/synth';
+import { type AudioBusId, SoundEngine } from './audio/synth';
 import {
   createBlueprint,
   decodeBlueprint,
@@ -46,8 +48,16 @@ import {
 } from './game/world';
 import { installGameHook } from './hook';
 import { GamepadController } from './input/gamepad';
-import { BASE_TILE_PX, CameraState, FactoryRenderer } from './render/renderer';
-import { renderFiguresGallery } from './render/sprites';
+import {
+  BASE_TILE_PX,
+  CameraState,
+  FactoryRenderer,
+  type RenderOptions,
+} from './render/renderer';
+import {
+  type FiguresGalleryLabels,
+  renderFiguresGallery,
+} from './render/sprites';
 import './style.css';
 import {
   COLORBLIND_MODES,
@@ -188,7 +198,9 @@ const view: HudViewState = {
   colorblindMode: initialPrefs.colorblindMode,
   colorblind: initialPrefs.colorblindMode !== 'default',
   reducedMotion: initialPrefs.reducedMotion,
-  muted: false,
+  muted: sound.isMuted(),
+  audioMono: sound.isMono(),
+  audioVolumes: sound.getVolumes(),
   simSpeed: 1,
   showAltMode: true,
   showPowerOverlay: false,
@@ -220,10 +232,54 @@ let lastHudRenderMs = 0;
 let knownUnlockedTechs = new Set<string>(world.unlockedTechs);
 let powerWarnActive = world.power.satisfaction < 0.99;
 let lastPowerToastMs = 0;
+let victoryNotified = world.victoryAchieved;
+let cachedFiguresLocale: Locale | null = null;
+let cachedFiguresReduced: boolean | null = null;
+let cachedFiguresLabels: FiguresGalleryLabels | undefined;
+
+const renderOpts: RenderOptions = {
+  showAltMode: view.showAltMode,
+  showPowerOverlay: view.showPowerOverlay,
+  colorblind: view.colorblind,
+  colorblindMode: view.colorblindMode === 'default' ? 'none' : view.colorblindMode,
+  selectedTool: view.selectedTool,
+  toolDir: 1,
+  hoverTile: null,
+  dragPath: [],
+  activeBlueprint: null,
+  copyStart: null,
+  selectedBuildingId: null,
+  mineBeam: null,
+  simAlpha: 0,
+  reducedMotion: view.reducedMotion,
+  uiScale: view.uiScale,
+};
 
 let viewportW = window.innerWidth;
 let viewportH = window.innerHeight;
 let currentDpr = Math.max(1, window.devicePixelRatio || 1);
+
+function getFiguresLabels(): FiguresGalleryLabels {
+  if (
+    cachedFiguresLabels &&
+    cachedFiguresLocale === view.locale &&
+    cachedFiguresReduced === view.reducedMotion
+  ) {
+    return cachedFiguresLabels;
+  }
+  const bundle = getBundle(view.locale);
+  cachedFiguresLocale = view.locale;
+  cachedFiguresReduced = view.reducedMotion;
+  cachedFiguresLabels = {
+    title: bundle.figures_title,
+    itemsHeading: `${bundle.figures_items_heading} (${ITEM_IDS.length})`,
+    buildingsHeading: `${bundle.figures_buildings_heading} (${BUILDING_IDS.length})`,
+    items: bundle.items,
+    buildings: bundle.buildings,
+    reducedMotion: view.reducedMotion,
+  };
+  return cachedFiguresLabels;
+}
 
 function applyUiPreferencesToDom(): void {
   const root = document.documentElement;
@@ -238,6 +294,7 @@ function syncWorldTracking(w: WorldState): void {
   knownUnlockedTechs = new Set(w.unlockedTechs);
   powerWarnActive = w.power.satisfaction < 0.99;
   lastPowerToastMs = 0;
+  victoryNotified = w.victoryAchieved;
 }
 
 function resetCamera(): void {
@@ -292,6 +349,7 @@ function renderHudNow(): void {
 
 function startNewFactory(): void {
   world = createWorld(config.seed.value);
+  renderer.dispose();
   view.scene = 'play';
   view.selectedTool = 'cursor';
   view.selectedBuildingId = null;
@@ -307,16 +365,16 @@ function startNewFactory(): void {
 const hudActions: HudActions = {
   onStartNew: () => {
     sound.unlock();
-    sound.playUiTick();
+    sound.emit('ui_tick');
     startNewFactory();
   },
   onContinueSave: () => {
     sound.unlock();
-    sound.playUiTick();
     const t = getBundle(view.locale);
     const loaded = loadFromStorage();
     if (loaded) {
       world = loaded;
+      renderer.dispose();
       view.scene = 'play';
       view.selectedTool = 'cursor';
       view.selectedBuildingId = null;
@@ -325,16 +383,19 @@ const hudActions: HudActions = {
       clearPointerAndDragState();
       resetCamera();
       syncWorldTracking(world);
+      sound.emit('ui_save');
       hud.showToast(t.msg_loaded);
     } else {
+      sound.emit('ui_error');
       hud.showToast(t.msg_no_save_found, true);
     }
     renderHudNow();
   },
   onStartDemo: () => {
     sound.unlock();
-    sound.playUiTick();
+    sound.emit('ui_tick');
     world = createDemoWorld(config);
+    renderer.dispose();
     view.scene = 'play';
     view.selectedTool = 'cursor';
     view.selectedBuildingId = null;
@@ -349,13 +410,13 @@ const hudActions: HudActions = {
   },
   onNewPlanetSeed: () => {
     sound.unlock();
-    sound.playUiTick();
+    sound.emit('ui_tick');
     config.seed.value = ((config.seed.value + 7919) % 999999) + 1;
     startNewFactory();
   },
   onToggleLocale: () => {
     sound.unlock();
-    sound.playUiTick();
+    sound.emit('ui_tick');
     view.locale = view.locale === 'pt-BR' ? 'en' : 'pt-BR';
     applyUiPreferencesToDom();
     saveUiPrefs(view);
@@ -363,7 +424,7 @@ const hudActions: HudActions = {
   },
   onSetTextScale: (scale: UiScale) => {
     sound.unlock();
-    sound.playUiTick();
+    sound.emit('ui_tick');
     view.uiScale = scale;
     applyUiPreferencesToDom();
     saveUiPrefs(view);
@@ -371,7 +432,7 @@ const hudActions: HudActions = {
   },
   onSetColorblindMode: (mode: ColorblindMode) => {
     sound.unlock();
-    sound.playUiTick();
+    sound.emit('ui_tick');
     view.colorblindMode = mode;
     view.colorblind = mode !== 'default';
     applyUiPreferencesToDom();
@@ -380,7 +441,7 @@ const hudActions: HudActions = {
   },
   onToggleReducedMotion: () => {
     sound.unlock();
-    sound.playUiTick();
+    sound.emit('ui_tick');
     view.reducedMotion = !view.reducedMotion;
     if (view.reducedMotion && world.rocketTimer > 0) {
       world.rocketTimer = 0;
@@ -391,7 +452,7 @@ const hudActions: HudActions = {
   },
   onSelectTool: (tool: ToolSelection) => {
     sound.unlock();
-    sound.playUiTick();
+    sound.emit('ui_tick');
     view.selectedTool = tool;
     if (tool !== 'cursor') view.selectedBuildingId = null;
     if (tool !== 'bp_copy') copyStart = null;
@@ -399,73 +460,102 @@ const hudActions: HudActions = {
   },
   onSelectCategory: (category: HotbarCategoryId) => {
     sound.unlock();
-    sound.playUiTick();
+    sound.emit('ui_tick');
     view.activeCategory = category;
     renderHudNow();
   },
   onSetSimSpeed: (speed: number) => {
     sound.unlock();
-    sound.playUiTick();
+    sound.emit(speed === 0 ? 'sim_pause' : 'ui_tick');
     view.simSpeed = speed;
     renderHudNow();
   },
   onToggleAltMode: () => {
     sound.unlock();
-    sound.playUiTick();
+    sound.emit('alt_mode');
     view.showAltMode = !view.showAltMode;
     renderHudNow();
   },
   onTogglePowerOverlay: () => {
     sound.unlock();
-    sound.playUiTick();
+    sound.emit('ui_tick');
     view.showPowerOverlay = !view.showPowerOverlay;
     renderHudNow();
   },
   onToggleMute: () => {
     sound.unlock();
     view.muted = sound.toggleMute();
+    if (!view.muted) sound.emit('ui_tick');
+    renderHudNow();
+  },
+  onSetAudioVolume: (bus: AudioBusId, value: number) => {
+    sound.unlock();
+    sound.setVolume(bus, value);
+    view.audioVolumes = sound.getVolumes();
+    renderHudNow();
+  },
+  onToggleAudioMono: () => {
+    sound.unlock();
+    sound.setMono(!sound.isMono());
+    view.audioMono = sound.isMono();
+    sound.emit('ui_tick');
     renderHudNow();
   },
   onOpenModal: (modal: ModalId) => {
     sound.unlock();
-    sound.playUiTick();
+    const prevModal = view.activeModal;
+    if (modal !== 'none' && modal !== prevModal) {
+      sound.emit('ui_modal_open');
+    } else if (modal === 'none' && prevModal !== 'none') {
+      sound.emit('ui_modal_close');
+    } else {
+      sound.emit('ui_tick');
+    }
     view.activeModal = modal;
     if (modal !== 'none') clearPointerAndDragState();
     renderHudNow();
   },
   onSaveLocal: () => {
     sound.unlock();
-    sound.playUiTick();
     const t = getBundle(view.locale);
     if (saveToStorage(world)) {
+      sound.emit('ui_save');
       hud.showToast(t.msg_saved);
     } else {
+      sound.emit('ui_error');
       hud.showToast(t.msg_save_storage_failed, true);
     }
   },
   onImportSaveText: (json: string) => {
+    sound.unlock();
     const res = deserializeWorld(json);
     const t = getBundle(view.locale);
     if (!res.ok) {
+      sound.emit('ui_error');
       hud.showToast(t.msg_save_invalid, true);
       return;
     }
     world = res.world;
+    renderer.dispose();
     view.selectedBuildingId = null;
     view.activeModal = 'none';
     hoverTile = null;
     clearPointerAndDragState();
     resetCamera();
     syncWorldTracking(world);
+    sound.emit('ui_save');
     hud.showToast(t.msg_loaded);
     renderHudNow();
   },
   onStampBlueprint: (bp: BlueprintData) => {
+    sound.unlock();
+    sound.emit('ui_tick');
     activeBlueprint = { ...bp, entries: bp.entries.map((e) => ({ ...e })) };
     view.selectedTool = 'bp_stamp';
     renderHudNow();
   },
   onCopyBlueprint: (bp: BlueprintData) => {
+    sound.unlock();
     const code = encodeBlueprint(bp);
     view.lastBpCode = code;
     try {
@@ -473,13 +563,16 @@ const hudActions: HudActions = {
     } catch {
       // Clipboard API may be unavailable in non-secure contexts
     }
+    sound.emit('bp_copy');
     hud.showToast(getBundle(view.locale).msg_bp_copied);
     renderHudNow();
   },
   onImportBlueprint: (raw: string) => {
+    sound.unlock();
     const t = getBundle(view.locale);
     const res = decodeBlueprint(raw);
     if (!res.ok) {
+      sound.emit('ui_error');
       hud.showToast(t.msg_bp_invalid, true);
       return;
     }
@@ -491,6 +584,7 @@ const hudActions: HudActions = {
     };
     view.selectedTool = 'bp_stamp';
     view.activeModal = 'none';
+    sound.emit('ui_tick');
     hud.showToast(t.msg_bp_imported);
     renderHudNow();
   },
@@ -503,7 +597,7 @@ const hudActions: HudActions = {
       if (ev.some((e) => e.kind === 'launch')) {
         handleAudioEvents(ev);
       } else {
-        sound.playUiTick();
+        sound.emit('hub_load');
         hud.showToast(t.msg_phase_loaded);
       }
       renderHudNow();
@@ -512,27 +606,37 @@ const hudActions: HudActions = {
   onSkipRocketAnimation: () => {
     if (world.rocketTimer <= 0) return;
     sound.unlock();
-    sound.playUiTick();
+    sound.emit('ui_tick');
     world.rocketTimer = 0;
     hud.showToast(getBundle(view.locale).msg_launch_skipped);
     renderHudNow();
   },
   onSetMachineRecipe: (entityId: number, recipeId: string) => {
     sound.unlock();
-    sound.playUiTick();
-    setMachineRecipe(world, entityId, recipeId);
+    if (setMachineRecipe(world, entityId, recipeId, config)) {
+      sound.emit('ui_tick');
+    } else {
+      sound.emit('ui_error');
+      hud.showToast(getBundle(view.locale).msg_tech_locked, true);
+    }
     renderHudNow();
   },
   onSetMachineClock: (entityId: number, clock: number) => {
-    setMachineClock(world, entityId, clock, config.free_build.value >= 1);
+    sound.unlock();
+    if (setMachineClock(world, entityId, clock, config.free_build.value >= 1)) {
+      sound.emit('ui_tick');
+    } else {
+      sound.emit('ui_error');
+    }
     renderHudNow();
   },
   onRotateBuilding: (entityId: number) => {
     const b = world.buildings[entityId];
     if (!b) return;
     sound.unlock();
-    sound.playUiTick();
-    rotateBuilding(world, b.x, b.y);
+    if (rotateBuilding(world, b.x, b.y)) {
+      sound.emit('build_rotate');
+    }
     renderHudNow();
   },
   onRemoveBuilding: (entityId: number) => {
@@ -540,7 +644,10 @@ const hudActions: HudActions = {
     if (!b) return;
     sound.unlock();
     if (removeBuilding(world, b.x, b.y, true)) {
-      sound.playRemove();
+      sound.emit('build_remove');
+      if (!view.reducedMotion) {
+        renderer.spawnBurst(b.x + 0.5, b.y + 0.5, 'remove');
+      }
       if (view.selectedBuildingId === entityId) {
         view.selectedBuildingId = null;
       }
@@ -549,14 +656,14 @@ const hudActions: HudActions = {
   },
   onCloseInspector: () => {
     sound.unlock();
-    sound.playUiTick();
+    sound.emit('ui_tick');
     view.selectedBuildingId = null;
     renderHudNow();
   },
   onSetActiveTech: (techId: string) => {
     if (!canStartTech(world, techId)) return;
     sound.unlock();
-    sound.playUiTick();
+    sound.emit('ui_tick');
     world.activeTechId = techId;
     renderHudNow();
   },
@@ -568,6 +675,7 @@ const hudActions: HudActions = {
       handleAudioEvents(ev);
       renderHudNow();
     } else {
+      sound.emit('ui_error');
       hud.showToast(t.msg_no_materials, true);
     }
   },
@@ -579,7 +687,7 @@ const hudActions: HudActions = {
   },
   onResetConfig: () => {
     sound.unlock();
-    sound.playUiTick();
+    sound.emit('ui_tick');
     const defaults = createDefaultConfig();
     for (const key of Object.keys(defaults) as Array<keyof GameConfig>) {
       config[key].value = defaults[key].value;
@@ -588,14 +696,22 @@ const hudActions: HudActions = {
   },
   onDismissVictory: () => {
     sound.unlock();
-    sound.playUiTick();
+    sound.emit('ui_modal_close');
     world.victoryDismissed = true;
     view.activeModal = 'none';
     renderHudNow();
   },
   onPlayUiTick: () => {
     sound.unlock();
-    sound.playUiTick();
+    sound.emit('ui_tick');
+  },
+  onPlayUiError: () => {
+    sound.unlock();
+    sound.emit('ui_error');
+  },
+  onPlaySaveSound: () => {
+    sound.unlock();
+    sound.emit('ui_save');
   },
 };
 
@@ -622,18 +738,24 @@ function handleAudioEvents(events: SimulationAudioEvent[]): void {
   const t = getBundle(view.locale);
   for (const ev of events) {
     if (ev.kind === 'launch') {
-      sound.playRocketLaunch();
+      sound.emit('rocket_launch');
       hud.showToast(t.msg_rocket_launch);
       if (view.reducedMotion) {
         world.rocketTimer = 0;
       }
-      if (world.victoryAchieved && !world.victoryDismissed) {
-        view.activeModal = 'victory';
+      if (world.victoryAchieved) {
+        if (!victoryNotified) {
+          victoryNotified = true;
+          sound.emit('victory_fanfare');
+        }
+        if (!world.victoryDismissed) {
+          view.activeModal = 'victory';
+        }
       }
     } else if (ev.kind === 'tech') {
       const newlyUnlocked = world.unlockedTechs.filter((id) => !knownUnlockedTechs.has(id));
       for (const id of newlyUnlocked) knownUnlockedTechs.add(id);
-      sound.playTechUnlock();
+      sound.emit('tech_unlock');
       if (newlyUnlocked.length === 1 && t.techs[newlyUnlocked[0]]) {
         hud.showToast(`${t.msg_tech_unlocked}: ${t.techs[newlyUnlocked[0]].name}`);
       } else {
@@ -652,10 +774,12 @@ function checkPowerSatisfactionNotification(): void {
     if (lastPowerToastMs === 0 || now - lastPowerToastMs >= 8000) {
       powerWarnActive = true;
       lastPowerToastMs = now;
+      sound.emit('power_brownout');
       hud.showToast(t.msg_power_low, true);
     }
   } else if (sat >= 0.995 && powerWarnActive) {
     powerWarnActive = false;
+    sound.emit('power_restored');
     hud.showToast(t.msg_power_restored);
   }
 }
@@ -670,6 +794,7 @@ function advanceSimTicks(count: number): void {
 
 function showPlacementFailure(reason?: string): void {
   const t = getBundle(view.locale);
+  sound.emit('ui_error');
   if (reason === 'no_materials') hud.showToast(t.msg_no_materials, true);
   else if (reason === 'locked') hud.showToast(t.msg_tech_locked, true);
   else if (reason === 'needs_ore') hud.showToast(t.msg_needs_ore, true);
@@ -680,20 +805,28 @@ function commitDragBelts(): void {
   if (dragPath.length === 0 || !isBeltType(view.selectedTool as BuildingId)) return;
   const tool = view.selectedTool as BuildingId;
   let placed = 0;
+  let rotated = 0;
   for (const step of dragPath) {
     const existing = getBuildingAt(world, step.x, step.y);
     if (existing && isBeltType(existing.type)) {
-      rotateBuilding(world, step.x, step.y, step.dir);
+      if (rotateBuilding(world, step.x, step.y, step.dir)) {
+        rotated++;
+      }
       continue;
     }
     const res = placeBuilding(world, tool, step.x, step.y, step.dir, config);
-    if (res.ok) placed++;
-    else if (res.reason && res.reason !== 'occupied') {
+    if (res.ok) {
+      placed++;
+      if (!view.reducedMotion) {
+        renderer.spawnBurst(step.x + 0.5, step.y + 0.5, 'build');
+      }
+    } else if (res.reason && res.reason !== 'occupied') {
       showPlacementFailure(res.reason);
       break;
     }
   }
-  if (placed > 0) sound.playPlace();
+  if (placed > 0) sound.emit('build_place');
+  else if (rotated > 0) sound.emit('build_rotate');
   dragPath = [];
   renderHudNow();
 }
@@ -705,7 +838,10 @@ function dismantleAt(tx: number, ty: number): boolean {
   if (target && view.selectedBuildingId === target.id) {
     view.selectedBuildingId = null;
   }
-  sound.playRemove();
+  sound.emit('build_remove');
+  if (!view.reducedMotion) {
+    renderer.spawnBurst(tx + 0.5, ty + 0.5, 'remove');
+  }
   renderHudNow();
   return true;
 }
@@ -717,6 +853,7 @@ function handlePrimaryActionAt(tx: number, ty: number, discrete = false): void {
   if (view.selectedTool === 'bp_copy') {
     if (!copyStart) {
       copyStart = { x: tx, y: ty };
+      sound.emit('ui_tick');
       return;
     }
     const bp = createBlueprint(
@@ -733,8 +870,10 @@ function handlePrimaryActionAt(tx: number, ty: number, discrete = false): void {
       view.lastBpCode = encodeBlueprint(bp);
       activeBlueprint = bp;
       view.selectedTool = 'bp_stamp';
+      sound.emit('bp_copy');
       hud.showToast(t.msg_bp_copied);
     } else {
+      sound.emit('ui_error');
       view.selectedTool = 'cursor';
     }
     renderHudNow();
@@ -743,7 +882,23 @@ function handlePrimaryActionAt(tx: number, ty: number, discrete = false): void {
 
   if (view.selectedTool === 'bp_stamp' && activeBlueprint) {
     const res = placeBlueprint(world, activeBlueprint, tx, ty, config);
-    if (res.placed > 0) sound.playPlace();
+    if (res.placed > 0) {
+      sound.emit('bp_stamp');
+      if (!view.reducedMotion) {
+        let bursts = 0;
+        for (const e of activeBlueprint.entries) {
+          if (bursts >= 12) break;
+          const bx = tx + e.dx;
+          const by = ty + e.dy;
+          if (inBounds(bx, by) && getBuildingAt(world, bx, by)?.type === e.type) {
+            renderer.spawnBurst(bx + 0.5, by + 0.5, 'build');
+            bursts++;
+          }
+        }
+      }
+    } else {
+      sound.emit('ui_error');
+    }
     renderHudNow();
     return;
   }
@@ -757,7 +912,10 @@ function handlePrimaryActionAt(tx: number, ty: number, discrete = false): void {
     const mined = mineTileManual(world, tx, ty);
     if (mined) {
       mineBeam = { tx, ty, timer: 0.25 };
-      sound.playMine();
+      sound.emit('mine_hit');
+      if (!view.reducedMotion) {
+        renderer.spawnBurst(tx + 0.5, ty + 0.5, 'mine');
+      }
       renderHudNow();
     }
     return;
@@ -769,8 +927,9 @@ function handlePrimaryActionAt(tx: number, ty: number, discrete = false): void {
       if (discrete) {
         const existing = getBuildingAt(world, tx, ty);
         if (existing && isBeltType(existing.type)) {
-          rotateBuilding(world, tx, ty, toolDir);
-          sound.playUiTick();
+          if (rotateBuilding(world, tx, ty, toolDir)) {
+            sound.emit('build_rotate');
+          }
           renderHudNow();
           return;
         }
@@ -781,7 +940,10 @@ function handlePrimaryActionAt(tx: number, ty: number, discrete = false): void {
         }
         const res = placeBuilding(world, bType, tx, ty, toolDir, config);
         if (res.ok) {
-          sound.playPlace();
+          sound.emit('build_place');
+          if (!view.reducedMotion) {
+            renderer.spawnBurst(tx + 0.5, ty + 0.5, 'build');
+          }
           renderHudNow();
         }
         return;
@@ -797,7 +959,10 @@ function handlePrimaryActionAt(tx: number, ty: number, discrete = false): void {
     }
     const res = placeBuilding(world, bType, tx, ty, toolDir, config);
     if (res.ok) {
-      sound.playPlace();
+      sound.emit('build_place');
+      if (!view.reducedMotion) {
+        renderer.spawnBurst(tx + 0.5, ty + 0.5, 'build');
+      }
       renderHudNow();
     }
     return;
@@ -807,14 +972,17 @@ function handlePrimaryActionAt(tx: number, ty: number, discrete = false): void {
   const b = getBuildingAt(world, tx, ty);
   if (b) {
     view.selectedBuildingId = b.id;
-    sound.playUiTick();
+    sound.emit('ui_tick');
     renderHudNow();
   } else {
     view.selectedBuildingId = null;
     const mined = mineTileManual(world, tx, ty);
     if (mined) {
       mineBeam = { tx, ty, timer: 0.25 };
-      sound.playMine();
+      sound.emit('mine_hit');
+      if (!view.reducedMotion) {
+        renderer.spawnBurst(tx + 0.5, ty + 0.5, 'mine');
+      }
     }
     renderHudNow();
   }
@@ -837,7 +1005,7 @@ function handleRotateAction(shiftKey: boolean): void {
   } else {
     toolDir = rotateDirCW(toolDir, steps);
   }
-  sound.playUiTick();
+  sound.emit('build_rotate');
   renderHudNow();
 }
 
@@ -847,7 +1015,7 @@ function handlePipetteAction(): void {
   if (b && b.type !== 'orbital_hub') {
     view.selectedTool = b.type;
     toolDir = b.dir;
-    sound.playUiTick();
+    sound.emit('ui_tick');
     renderHudNow();
   }
 }
@@ -880,7 +1048,7 @@ function handleKeyPress(key: string, shiftKey = false, ctrlKey = false): void {
   if (view.scene === 'title') {
     if (key === 'Enter') {
       sound.unlock();
-      sound.playUiTick();
+      sound.emit('ui_tick');
       startNewFactory();
     }
     return;
@@ -895,11 +1063,11 @@ function handleKeyPress(key: string, shiftKey = false, ctrlKey = false): void {
       view.selectedTool = 'cursor';
       dragPath = [];
       copyStart = null;
-      sound.playUiTick();
+      sound.emit('ui_tick');
       renderHudNow();
     } else if (view.selectedBuildingId !== null) {
       view.selectedBuildingId = null;
-      sound.playUiTick();
+      sound.emit('ui_tick');
       renderHudNow();
     }
     return;
@@ -920,7 +1088,7 @@ function handleKeyPress(key: string, shiftKey = false, ctrlKey = false): void {
   if (ctrlKey && lower === 'c') {
     view.selectedTool = 'bp_copy';
     copyStart = null;
-    sound.playUiTick();
+    sound.emit('ui_tick');
     renderHudNow();
     return;
   }
@@ -948,7 +1116,7 @@ function handleKeyPress(key: string, shiftKey = false, ctrlKey = false): void {
   if (key === 'Home') {
     resetCamera();
     hoverTile = { x: HUB_ORIGIN + 1, y: HUB_ORIGIN + 1 };
-    sound.playUiTick();
+    sound.emit('ui_tick');
     return;
   }
 
@@ -1119,6 +1287,7 @@ window.addEventListener('mousemove', (e) => {
         }
         toolDir = stepDir;
         dragPath.push({ x: nx, y: ny, dir: stepDir });
+        sound.emit('belt_drag_step');
         cur.x = nx;
         cur.y = ny;
         cur.dir = stepDir;
@@ -1375,7 +1544,15 @@ function frameLoop(nowMs: number): void {
   const renderTimeSec = view.reducedMotion ? 0.35 : nowMs / 1000;
 
   if (isFiguresScene) {
-    renderFiguresGallery(ctx, viewportW, viewportH, view.locale, renderTimeSec);
+    sound.updateAmbient(0, 1, true);
+    renderFiguresGallery(
+      ctx,
+      viewportW,
+      viewportH,
+      view.locale,
+      renderTimeSec,
+      getFiguresLabels()
+    );
     requestAnimationFrame(frameLoop);
     return;
   }
@@ -1418,19 +1595,37 @@ function frameLoop(nowMs: number): void {
     }
   }
 
-  renderer.render(ctx, viewportW, viewportH, world, cam, renderTimeSec, {
-    showAltMode: view.showAltMode,
-    showPowerOverlay: view.showPowerOverlay,
-    colorblind: view.colorblind,
-    selectedTool: view.selectedTool,
-    toolDir,
-    hoverTile,
-    dragPath,
-    activeBlueprint,
-    copyStart,
-    selectedBuildingId: view.selectedBuildingId,
-    mineBeam,
-  });
+  let activeMachines = 0;
+  if (view.scene === 'play' && view.simSpeed > 0) {
+    const buildings = world.buildings;
+    for (const k in buildings) {
+      if (buildings[k].status === 'working') activeMachines++;
+    }
+  }
+  sound.updateAmbient(
+    activeMachines,
+    world.power.satisfaction,
+    view.simSpeed === 0 || view.scene !== 'play'
+  );
+
+  renderOpts.showAltMode = view.showAltMode;
+  renderOpts.showPowerOverlay = view.showPowerOverlay;
+  renderOpts.colorblind = view.colorblind;
+  renderOpts.colorblindMode =
+    view.colorblindMode === 'default' ? 'none' : view.colorblindMode;
+  renderOpts.selectedTool = view.selectedTool;
+  renderOpts.toolDir = toolDir;
+  renderOpts.hoverTile = hoverTile;
+  renderOpts.dragPath = dragPath;
+  renderOpts.activeBlueprint = activeBlueprint;
+  renderOpts.copyStart = copyStart;
+  renderOpts.selectedBuildingId = view.selectedBuildingId;
+  renderOpts.mineBeam = mineBeam;
+  renderOpts.simAlpha = view.simSpeed > 0 ? Math.min(1, simAccumulator / DT) : 0;
+  renderOpts.reducedMotion = view.reducedMotion;
+  renderOpts.uiScale = view.uiScale;
+
+  renderer.render(ctx, viewportW, viewportH, world, cam, renderTimeSec, renderOpts);
 
   requestAnimationFrame(frameLoop);
 }

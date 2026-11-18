@@ -22,9 +22,11 @@ import {
   getRollingRates,
   getTechById,
 } from '../game/progression';
+import type { AudioBusId, AudioVolumes } from '../audio/synth';
 import { hasSavedGame, serializeWorld } from '../game/save';
-import { isBuildingUnlocked, isFeatureUnlocked } from '../game/world';
+import { isBuildingUnlocked, isFeatureUnlocked, isRecipeUnlocked } from '../game/world';
 import {
+  type ColorblindMode as SpriteColorblindMode,
   getBuildingIconDataUrl,
   getItemIconDataUrl,
   statusColor,
@@ -85,6 +87,8 @@ export interface HudActions {
   onToggleAltMode: () => void;
   onTogglePowerOverlay: () => void;
   onToggleMute: () => void;
+  onSetAudioVolume: (bus: AudioBusId, value: number) => void;
+  onToggleAudioMono: () => void;
   onOpenModal: (modal: ModalId) => void;
   onSaveLocal: () => void;
   onImportSaveText: (json: string) => void;
@@ -104,6 +108,8 @@ export interface HudActions {
   onResetConfig: () => void;
   onDismissVictory: () => void;
   onPlayUiTick: () => void;
+  onPlayUiError: () => void;
+  onPlaySaveSound: () => void;
 }
 
 export interface HudViewState {
@@ -114,6 +120,8 @@ export interface HudViewState {
   colorblind: boolean;
   reducedMotion: boolean;
   muted: boolean;
+  audioMono: boolean;
+  audioVolumes: AudioVolumes;
   simSpeed: number;
   showAltMode: boolean;
   showPowerOverlay: boolean;
@@ -342,10 +350,14 @@ function setPressed(btn: HTMLButtonElement, pressed: boolean): void {
   }
 }
 
+function toSpriteCb(mode: ColorblindMode): SpriteColorblindMode {
+  return mode === 'default' ? 'none' : mode;
+}
+
 function makeItemChip(
   item: ItemId,
   labelText: string,
-  colorblind: boolean,
+  colorblind: boolean | SpriteColorblindMode,
   titleText?: string
 ): { chip: HTMLSpanElement; img: HTMLImageElement; txt: HTMLSpanElement } {
   const chip = el('span', 'item-chip');
@@ -402,7 +414,7 @@ interface HotbarSlotRef {
   keyBadge: HTMLSpanElement;
   lockBadge: HTMLSpanElement;
   deficitBadge: HTMLSpanElement;
-  lastCb: boolean | null;
+  lastCb: ColorblindMode | null;
 }
 
 interface TechCardRef {
@@ -410,7 +422,7 @@ interface TechCardRef {
   card: HTMLDivElement;
   titleEl: HTMLHeadingElement;
   descEl: HTMLParagraphElement;
-  chips: Array<{ item: ItemId; count: number; img: HTMLImageElement; txt: HTMLSpanElement; lastCb: boolean }>;
+  chips: Array<{ item: ItemId; count: number; img: HTMLImageElement; txt: HTMLSpanElement; lastCb: ColorblindMode }>;
   doneBadge: HTMLSpanElement;
   btnRow: HTMLDivElement;
   focusBtn: HTMLButtonElement;
@@ -422,7 +434,7 @@ interface PhaseRowRef {
   phaseId: string;
   row: HTMLDivElement;
   titleEl: HTMLElement;
-  chips: Array<{ item: ItemId; count: number; img: HTMLImageElement; txt: HTMLSpanElement; lastCb: boolean }>;
+  chips: Array<{ item: ItemId; count: number; img: HTMLImageElement; txt: HTMLSpanElement; lastCb: ColorblindMode }>;
 }
 
 interface StatsRefs {
@@ -458,7 +470,7 @@ export class FactoryHud {
   private previouslyFocusedEl: HTMLElement | null = null;
   private renderedModalId: ModalId = 'none';
   private renderedModalLocale: Locale | null = null;
-  private renderedModalCb: boolean | null = null;
+  private renderedModalCb: ColorblindMode | null = null;
   private renderedSavedBpSig = '';
 
   // Persistent Title refs
@@ -482,7 +494,7 @@ export class FactoryHud {
     phaseReqs: HTMLDivElement;
     phaseChips: PhaseChipRef[];
     renderedPhaseId: string | null;
-    renderedPhaseCb: boolean | null;
+    renderedPhaseCb: ColorblindMode | null;
     phaseDoneText: HTMLSpanElement;
     loadBtn: HTMLButtonElement;
     skipLaunchBtn: HTMLButtonElement;
@@ -518,13 +530,14 @@ export class FactoryHud {
   // Persistent Inspector refs
   private renderedInspId: number | null = null;
   private renderedInspLocale: Locale | null = null;
-  private renderedInspCb: boolean | null = null;
+  private renderedInspCb: ColorblindMode | null = null;
   private lastInspBufferDigest = '';
   private inspRefs: {
     statusDot: HTMLSpanElement;
     statusText: HTMLSpanElement;
     geoBadge: HTMLDivElement;
     recipeSelect: HTMLSelectElement | null;
+    recipeOptions: Map<string, HTMLOptionElement>;
     ocLabel: HTMLLabelElement | null;
     ocSlider: HTMLInputElement | null;
     ocLockedNote: HTMLDivElement | null;
@@ -546,6 +559,8 @@ export class FactoryHud {
   } | null = null;
   private tweakRefs: {
     sliders: Map<keyof GameConfig, { input: HTMLInputElement; valSpan: HTMLSpanElement }>;
+    audioSliders: Map<AudioBusId, { input: HTMLInputElement; valSpan: HTMLSpanElement }>;
+    monoBtn: HTMLButtonElement | null;
     scaleBtns: Map<UiScale, HTMLButtonElement>;
     cbBtns: Map<ColorblindMode, HTMLButtonElement>;
     motionBtn: HTMLButtonElement | null;
@@ -1023,16 +1038,16 @@ export class FactoryHud {
       r.phaseDoneText.classList.add('hidden');
       setTextIfChanged(r.phaseTitle, t.phases[phase.id]);
 
-      if (r.renderedPhaseId !== phase.id || r.renderedPhaseCb !== view.colorblind) {
+      if (r.renderedPhaseId !== phase.id || r.renderedPhaseCb !== view.colorblindMode) {
         r.renderedPhaseId = phase.id;
-        r.renderedPhaseCb = view.colorblind;
+        r.renderedPhaseCb = view.colorblindMode;
         r.phaseReqs.textContent = '';
         r.phaseChips = [];
         for (const req of phase.requirements) {
           const { chip, img, txt } = makeItemChip(
             req.item,
             `0/${req.count}`,
-            view.colorblind,
+            toSpriteCb(view.colorblindMode),
             t.items[req.item]
           );
           r.phaseReqs.append(chip);
@@ -1216,6 +1231,7 @@ export class FactoryHud {
             const curView = this.lastView;
             const curBundle = getBundle(curView?.locale ?? 'pt-BR');
             if (btn.dataset.locked === 'true') {
+              this.actions.onPlayUiError();
               this.showToast(curBundle.msg_tech_locked, true);
               return;
             }
@@ -1257,9 +1273,9 @@ export class FactoryHud {
         slotRef.btn.setAttribute('aria-label', `${t.buildings[bType].name}${statusHint}`);
       }
 
-      if (slotRef.lastCb !== view.colorblind) {
-        slotRef.lastCb = view.colorblind;
-        slotRef.img.src = getBuildingIconDataUrl(bType, 36, view.colorblind);
+      if (slotRef.lastCb !== view.colorblindMode) {
+        slotRef.lastCb = view.colorblindMode;
+        slotRef.img.src = getBuildingIconDataUrl(bType, 36, toSpriteCb(view.colorblindMode));
       }
       slotRef.img.alt = t.buildings[bType].name;
       setTextIfChanged(slotRef.label, t.buildings[bType].name);
@@ -1293,19 +1309,19 @@ export class FactoryHud {
     const rebuildNeeded =
       this.renderedInspId !== b.id ||
       this.renderedInspLocale !== view.locale ||
-      this.renderedInspCb !== view.colorblind;
+      this.renderedInspCb !== view.colorblindMode;
 
     if (rebuildNeeded) {
       this.renderedInspId = b.id;
       this.renderedInspLocale = view.locale;
-      this.renderedInspCb = view.colorblind;
+      this.renderedInspCb = view.colorblindMode;
       this.lastInspBufferDigest = '';
       this.inspectorEl.textContent = '';
 
       const header = el('div', 'inspector-head');
       const titleWrap = el('div', 'inspector-title-wrap');
       const icon = el('img', 'icon-md');
-      icon.src = getBuildingIconDataUrl(b.type, 40, view.colorblind);
+      icon.src = getBuildingIconDataUrl(b.type, 40, toSpriteCb(view.colorblindMode));
       icon.alt = t.buildings[b.type].name;
       const title = el('strong', undefined, t.buildings[b.type].name);
       titleWrap.append(icon, title);
@@ -1328,6 +1344,7 @@ export class FactoryHud {
       this.inspectorEl.append(geoBadge);
 
       let recipeSelect: HTMLSelectElement | null = null;
+      const recipeOptions = new Map<string, HTMLOptionElement>();
       if (isProcessorType(b.type)) {
         const recLabel = el('label', 'field-label', t.inspector_recipe);
         const selId = `inspector-recipe-${b.id}`;
@@ -1339,9 +1356,17 @@ export class FactoryHud {
         recipeSelect.append(optAuto);
 
         for (const r of getRecipesForBuilding(b.type)) {
-          const opt = el('option', undefined, t.recipes[r.id] ?? r.id);
+          const unlocked = isRecipeUnlocked(world, r, config);
+          const baseName = t.recipes[r.id] ?? r.id;
+          const opt = el(
+            'option',
+            undefined,
+            unlocked ? baseName : `${baseName} [${t.status_locked_short}]`
+          );
           opt.value = r.id;
+          opt.disabled = !unlocked;
           recipeSelect.append(opt);
+          recipeOptions.set(r.id, opt);
         }
         recipeSelect.value = b.recipeId;
         recipeSelect.onchange = () => {
@@ -1395,6 +1420,7 @@ export class FactoryHud {
         statusText,
         geoBadge,
         recipeSelect,
+        recipeOptions,
         ocLabel,
         ocSlider,
         ocLockedNote,
@@ -1407,12 +1433,21 @@ export class FactoryHud {
     }
 
     const r = this.inspRefs!;
-    r.statusDot.style.background = statusColor(b.status, view.colorblind);
+    r.statusDot.style.background = statusColor(b.status, toSpriteCb(view.colorblindMode));
     setTextIfChanged(r.statusText, `${t.statuses[b.status]} | ${b.activePowerMw.toFixed(1)} MW`);
     r.geoBadge.classList.toggle('hidden', b.geoBonus <= 0);
 
-    if (r.recipeSelect && document.activeElement !== r.recipeSelect) {
-      if (r.recipeSelect.value !== b.recipeId) {
+    if (r.recipeSelect) {
+      for (const rec of getRecipesForBuilding(b.type)) {
+        const opt = r.recipeOptions.get(rec.id);
+        if (!opt) continue;
+        const unlocked = isRecipeUnlocked(world, rec, config);
+        const baseName = t.recipes[rec.id] ?? rec.id;
+        const nextLabel = unlocked ? baseName : `${baseName} [${t.status_locked_short}]`;
+        if (opt.disabled !== !unlocked) opt.disabled = !unlocked;
+        if (opt.textContent !== nextLabel) opt.textContent = nextLabel;
+      }
+      if (document.activeElement !== r.recipeSelect && r.recipeSelect.value !== b.recipeId) {
         r.recipeSelect.value = b.recipeId;
       }
     }
@@ -1449,11 +1484,12 @@ export class FactoryHud {
       r.buffersWrap.classList.toggle('hidden', !hasAny);
 
       if (hasAny) {
+        const spriteCb = toSpriteCb(view.colorblindMode);
         for (const [k, v] of Object.entries(b.inputBuffer)) {
           if (v && v > 0) {
             const item = k as ItemId;
             r.buffersGrid.append(
-              makeItemChip(item, `${t.buf_in} ${v}`, view.colorblind, t.items[item]).chip
+              makeItemChip(item, `${t.buf_in} ${v}`, spriteCb, t.items[item]).chip
             );
           }
         }
@@ -1462,7 +1498,7 @@ export class FactoryHud {
             makeItemChip(
               b.outputBuffer.item,
               `${t.buf_out} ${b.outputBuffer.count}`,
-              view.colorblind,
+              spriteCb,
               t.items[b.outputBuffer.item]
             ).chip
           );
@@ -1471,7 +1507,7 @@ export class FactoryHud {
           if (v && v > 0) {
             const item = k as ItemId;
             r.buffersGrid.append(
-              makeItemChip(item, String(v), view.colorblind, t.items[item]).chip
+              makeItemChip(item, String(v), spriteCb, t.items[item]).chip
             );
           }
         }
@@ -1480,7 +1516,7 @@ export class FactoryHud {
             el(
               'span',
               'item-chip',
-              `${b.energyMj.toFixed(1)} / ${def.energy_capacity_mj ?? 120} MJ`
+              `${b.energyMj.toFixed(1)} / ${def.energy_capacity_mj ?? 180} MJ`
             )
           );
         }
@@ -1542,7 +1578,7 @@ export class FactoryHud {
     const needRebuild =
       this.renderedModalId !== view.activeModal ||
       this.renderedModalLocale !== view.locale ||
-      this.renderedModalCb !== view.colorblind;
+      this.renderedModalCb !== view.colorblindMode;
 
     if (needRebuild) {
       const prevScroll =
@@ -1554,7 +1590,7 @@ export class FactoryHud {
 
       this.renderedModalId = view.activeModal;
       this.renderedModalLocale = view.locale;
-      this.renderedModalCb = view.colorblind;
+      this.renderedModalCb = view.colorblindMode;
       this.renderedSavedBpSig = bpSig;
 
       this.techRefs = null;
@@ -1608,6 +1644,7 @@ export class FactoryHud {
     if (view.activeModal === 'tech') {
       const grid = el('div', 'tech-grid');
       const cards: TechCardRef[] = [];
+      const spriteCb = toSpriteCb(view.colorblindMode);
 
       for (const tech of TECHS) {
         const card = el('div', 'tech-card');
@@ -1619,11 +1656,11 @@ export class FactoryHud {
           const { chip, img, txt } = makeItemChip(
             req.item,
             `0/${req.count}`,
-            view.colorblind,
+            spriteCb,
             t.items[req.item]
           );
           costs.append(chip);
-          chips.push({ item: req.item, count: req.count, img, txt, lastCb: view.colorblind });
+          chips.push({ item: req.item, count: req.count, img, txt, lastCb: view.colorblindMode });
         }
 
         const doneBadge = el('span', 'badge-ok hidden', t.unlocked);
@@ -1668,11 +1705,11 @@ export class FactoryHud {
           const { chip, img, txt } = makeItemChip(
             req.item,
             `0/${req.count}`,
-            view.colorblind,
+            spriteCb,
             t.items[req.item]
           );
           chipGrid.append(chip);
-          chips.push({ item: req.item, count: req.count, img, txt, lastCb: view.colorblind });
+          chips.push({ item: req.item, count: req.count, img, txt, lastCb: view.colorblindMode });
         }
         row.append(titleEl, chipGrid);
         phaseList.append(row);
@@ -1686,6 +1723,7 @@ export class FactoryHud {
     }
 
     if (view.activeModal === 'stats') {
+      const spriteCb = toSpriteCb(view.colorblindMode);
       body.append(el('h3', 'section-title', t.stats_stockpile));
       const stockGrid = el('div', 'chip-grid');
       const stockChips = new Map<ItemId, { img: HTMLImageElement; txt: HTMLSpanElement }>();
@@ -1693,7 +1731,7 @@ export class FactoryHud {
         const { chip, img, txt } = makeItemChip(
           item,
           `${t.items[item]}: 0`,
-          view.colorblind
+          spriteCb
         );
         stockGrid.append(chip);
         stockChips.set(item, { img, txt });
@@ -1714,7 +1752,7 @@ export class FactoryHud {
       >();
       for (const item of ITEM_IDS) {
         const row = el('div', 'rate-row hidden');
-        const { chip, img, txt: chipTxt } = makeItemChip(item, t.items[item], view.colorblind);
+        const { chip, img, txt: chipTxt } = makeItemChip(item, t.items[item], spriteCb);
         const pos = el('span', 'rate-val pos', `+0${t.unit_per_min}`);
         const neg = el('span', 'rate-val neg', `-0${t.unit_per_min}`);
         row.append(chip, pos, neg);
@@ -1817,6 +1855,53 @@ export class FactoryHud {
       a11yGroup.append(scaleRow, cbRow, motionRow);
       body.append(a11yGroup);
 
+      body.append(el('h3', 'section-title', t.audio_section_title));
+      const audioGroup = el('div', 'a11y-panel');
+      const audioSliders = new Map<AudioBusId, { input: HTMLInputElement; valSpan: HTMLSpanElement }>();
+      const busSpecs: Array<[AudioBusId, string]> = [
+        ['master', t.audio_master],
+        ['sfx', t.audio_sfx],
+        ['ui', t.audio_ui],
+        ['ambient', t.audio_ambient],
+      ];
+      for (const [bus, labelText] of busSpecs) {
+        const row = el('div', 'tweak-row');
+        const top = el('div', 'tweak-head');
+        const lbl = el('label', undefined, labelText);
+        const inputId = `audio-bus-${bus}`;
+        lbl.htmlFor = inputId;
+        const pct = Math.round((view.audioVolumes[bus] ?? 0.8) * 100);
+        const valSpan = el('span', 'badge-ok', `${pct}%`);
+        top.append(lbl, valSpan);
+
+        const slider = el('input', 'field-range');
+        slider.id = inputId;
+        slider.type = 'range';
+        slider.min = '0';
+        slider.max = '100';
+        slider.step = '5';
+        slider.value = String(pct);
+        slider.oninput = () => {
+          const p = Number(slider.value);
+          valSpan.textContent = `${p}%`;
+          this.actions.onSetAudioVolume(bus, p / 100);
+        };
+        row.append(top, slider);
+        audioGroup.append(row);
+        audioSliders.set(bus, { input: slider, valSpan });
+      }
+
+      const monoRow = el('div', 'tweak-row');
+      const monoHead = el('div', 'tweak-head');
+      monoHead.append(el('strong', undefined, t.audio_mono));
+      const monoBtn = el('button', 'btn btn-xs btn-ghost');
+      monoBtn.type = 'button';
+      monoBtn.id = 'btn-audio-mono';
+      monoBtn.onclick = () => this.actions.onToggleAudioMono();
+      monoRow.append(monoHead, monoBtn);
+      audioGroup.append(monoRow);
+      body.append(audioGroup);
+
       body.append(el('h3', 'section-title', t.tweak_title));
       const list = el('div', 'tweak-list');
       const sliders = new Map<keyof GameConfig, { input: HTMLInputElement; valSpan: HTMLSpanElement }>();
@@ -1855,7 +1940,7 @@ export class FactoryHud {
       resetBtn.onclick = () => this.actions.onResetConfig();
       body.append(list, resetBtn);
 
-      this.tweakRefs = { sliders, scaleBtns, cbBtns, motionBtn };
+      this.tweakRefs = { sliders, audioSliders, monoBtn, scaleBtns, cbBtns, motionBtn };
       this.patchTweakModal(config, view);
       return;
     }
@@ -1876,6 +1961,7 @@ export class FactoryHud {
         a.download = `aetherforge-tick-${world.tick}.json`;
         a.click();
         URL.revokeObjectURL(url);
+        this.actions.onPlaySaveSound();
       };
 
       const fileInput = el('input');
@@ -1887,6 +1973,7 @@ export class FactoryHud {
         fileInput.value = '';
         if (!file) return;
         if (file.size > MAX_SAVE_FILE_BYTES) {
+          this.actions.onPlayUiError();
           this.showToast(getBundle(this.lastView?.locale ?? 'pt-BR').msg_save_too_large, true);
           return;
         }
@@ -2103,6 +2190,26 @@ export class FactoryHud {
       if (document.activeElement !== ref.input && ref.input.value !== String(val)) {
         ref.input.value = String(val);
       }
+    }
+
+    for (const [bus, ref] of this.tweakRefs.audioSliders) {
+      const pct = Math.round((view.audioVolumes[bus] ?? 0.8) * 100);
+      setTextIfChanged(ref.valSpan, `${pct}%`);
+      if (document.activeElement !== ref.input && ref.input.value !== String(pct)) {
+        ref.input.value = String(pct);
+      }
+    }
+
+    if (this.tweakRefs.monoBtn) {
+      setTextIfChanged(
+        this.tweakRefs.monoBtn,
+        view.audioMono ? t.state_on : t.state_off
+      );
+      setClassIfChanged(
+        this.tweakRefs.monoBtn,
+        `btn btn-xs ${view.audioMono ? 'btn-accent' : 'btn-ghost'}`
+      );
+      setPressed(this.tweakRefs.monoBtn, view.audioMono);
     }
 
     for (const [scale, btn] of this.tweakRefs.scaleBtns) {

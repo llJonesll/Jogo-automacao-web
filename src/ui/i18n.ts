@@ -85,6 +85,15 @@ export interface LocalizationBundle {
   bp_starter_names: Record<string, string>;
   tweak_title: string;
   a11y_section_title: string;
+  audio_section_title: string;
+  audio_master: string;
+  audio_sfx: string;
+  audio_ui: string;
+  audio_ambient: string;
+  audio_mono: string;
+  figures_title: string;
+  figures_items_heading: string;
+  figures_buildings_heading: string;
   tweak_reset: string;
   save_title: string;
   save_local: string;
@@ -224,6 +233,15 @@ const PT_BR: LocalizationBundle = {
   },
   tweak_title: 'Configurações & Calibração',
   a11y_section_title: 'Acessibilidade & Exibição',
+  audio_section_title: 'Mistura de Áudio & Acessibilidade',
+  audio_master: 'Volume Geral',
+  audio_sfx: 'Efeitos (SFX)',
+  audio_ui: 'Interface (UI)',
+  audio_ambient: 'Ambiente Orbital',
+  audio_mono: 'Áudio Mono',
+  figures_title: 'AETHERFORGE — Catálogo Procedural de Itens e Estruturas',
+  figures_items_heading: 'ITENS',
+  figures_buildings_heading: 'ESTRUTURAS',
   tweak_reset: 'Restaurar Padrões',
   save_title: 'Gerenciador de Save & Mundo',
   save_local: 'Salvar no Navegador',
@@ -320,11 +338,11 @@ const PT_BR: LocalizationBundle = {
     foundry: { name: 'Alto-Forno', desc: 'Ligas avançadas de 2 insumos: Aço e Silício (8 MW).' },
     assembler: { name: 'Montadora', desc: 'Monta Circuitos, Rotores, Processadores e Núcleos (12 MW).' },
     coal_generator: { name: 'Termelétrica', desc: 'Gera +25 MW queimando 1 Carvão a cada 4s.' },
-    solar_panel: { name: 'Painel Solar', desc: 'Gera até +8 MW durante o ciclo diurno.' },
-    accumulator: { name: 'Acumulador', desc: 'Armazena 120 MJ para suprir picos e a noite (10 MW).' },
+    solar_panel: { name: 'Painel Solar', desc: 'Gera até +14 MW durante o ciclo diurno.' },
+    accumulator: { name: 'Acumulador', desc: 'Armazena 180 MJ para suprir picos e a noite (15 MW).' },
     geothermal_plant: { name: 'Usina Geotérmica', desc: 'Gera +60 MW contínuos sobre fissuras vulcânicas.' },
     research_lab: { name: 'Lab. de Pesquisa', desc: 'Dobra a eficiência (2x) de itens enviados à pesquisa.' },
-    orbital_hub: { name: 'Hub Orbital (3x3)', desc: 'Núcleo central indestrutível (+15 MW RTG) e elevador de carga.' },
+    orbital_hub: { name: 'Hub Orbital (3x3)', desc: 'Núcleo central indestrutível (+20 MW RTG) e elevador de carga.' },
   },
   recipes: {
     smelt_iron: 'Lingote de Ferro (1 Minério)',
@@ -345,10 +363,10 @@ const PT_BR: LocalizationBundle = {
   techs: {
     tier_1_logistics: { name: 'Tier 1: Logística Avançada', desc: 'Esteira Mk.II, Túnel, Divisor, Junção e Inserter.' },
     tier_2_metallurgy: { name: 'Tier 2: Metalurgia & Energia', desc: 'Alto-Forno, Termelétrica a Carvão e Lab. de Pesquisa.' },
-    tier_3_electronics: { name: 'Tier 3: Eletrônica & Solar', desc: 'Montadora, Painel Solar, Acumulador e Blueprints.' },
+    tier_3_electronics: { name: 'Tier 3: Eletrônica & Solar', desc: 'Montadora, Painel Solar e Acumulador.' },
     tier_4_overclock: { name: 'Tier 4: Overclock & Geotermia', desc: 'Overclock (50%-250%), Esteira Mk.III, Extrator Mk.II e Geotérmica.' },
     tier_5_quantum: { name: 'Tier 5: Computação Quântica', desc: 'Desbloqueia Processadores e Núcleos Quânticos de ponta.' },
-    orbital_ascension: { name: 'Tier 6: Ascensão Orbital', desc: 'Protocolo final de engenharia orbital.' },
+    orbital_ascension: { name: 'Tier 6: Ascensão Orbital', desc: 'Concede Sobrecarga Orbital (+50% velocidade global).' },
   },
   phases: {
     phase_1: 'Fase 1: Estrutura do Elevador',
@@ -469,6 +487,15 @@ const EN: LocalizationBundle = {
   },
   tweak_title: 'Settings & Studio Tuning',
   a11y_section_title: 'Accessibility & Display',
+  audio_section_title: 'Audio Mix & Accessibility',
+  audio_master: 'Master Volume',
+  audio_sfx: 'SFX Volume',
+  audio_ui: 'UI Volume',
+  audio_ambient: 'Ambient Volume',
+  audio_mono: 'Mono Audio',
+  figures_title: 'AETHERFORGE — Procedural Asset & Silhouette Catalog (Zero Emoji)',
+  figures_items_heading: 'ITEMS',
+  figures_buildings_heading: 'BUILDINGS',
   tweak_reset: 'Reset Defaults',
   save_title: 'Save & World Manager',
   save_local: 'Save to Browser',
@@ -565,11 +592,11 @@ const EN: LocalizationBundle = {
     foundry: { name: 'Foundry', desc: 'Dual-input alloys: Steel Beams & Silicon (8 MW).' },
     assembler: { name: 'Assembler', desc: 'Builds Circuits, Rotors, Frames, Processors & Cores (12 MW).' },
     coal_generator: { name: 'Coal Generator', desc: 'Generates +25 MW burning 1 Coal every 4s.' },
-    solar_panel: { name: 'Solar Panel', desc: 'Generates up to +8 MW during daylight.' },
-    accumulator: { name: 'Accumulator', desc: 'Stores 120 MJ for night & peak demand (10 MW).' },
+    solar_panel: { name: 'Solar Panel', desc: 'Generates up to +14 MW during daylight.' },
+    accumulator: { name: 'Accumulator', desc: 'Stores 180 MJ for night & peak demand (15 MW).' },
     geothermal_plant: { name: 'Geothermal Plant', desc: 'Generates +60 MW continuously on magma vents.' },
     research_lab: { name: 'Research Lab', desc: 'Doubles (2x) science value of delivered items.' },
-    orbital_hub: { name: 'Orbital Hub (3x3)', desc: 'Indestructible core (+15 MW RTG) & cargo elevator.' },
+    orbital_hub: { name: 'Orbital Hub (3x3)', desc: 'Indestructible core (+20 MW RTG) & cargo elevator.' },
   },
   recipes: {
     smelt_iron: 'Iron Ingot (1 Ore)',
@@ -590,10 +617,10 @@ const EN: LocalizationBundle = {
   techs: {
     tier_1_logistics: { name: 'Tier 1: Advanced Logistics', desc: 'Unlocks Belt Mk.II, Tunnel, Splitter, Merger & Inserter.' },
     tier_2_metallurgy: { name: 'Tier 2: Metallurgy & Coal', desc: 'Unlocks Foundry, Coal Generator & Research Lab.' },
-    tier_3_electronics: { name: 'Tier 3: Electronics & Solar', desc: 'Unlocks Assembler, Solar Panel, Accumulator & Blueprints.' },
+    tier_3_electronics: { name: 'Tier 3: Electronics & Solar', desc: 'Unlocks Assembler, Solar Panel & Accumulator.' },
     tier_4_overclock: { name: 'Tier 4: Overclock & Geothermal', desc: 'Unlocks Overclock (50%-250%), Belt Mk.III, Miner Mk.II & Geothermal.' },
     tier_5_quantum: { name: 'Tier 5: Quantum Computing', desc: 'Unlocks end-game Processors and Quantum Cores.' },
-    orbital_ascension: { name: 'Tier 6: Orbital Ascension', desc: 'Final orbital engineering protocol.' },
+    orbital_ascension: { name: 'Tier 6: Orbital Ascension', desc: 'Grants Orbital Overdrive (+50% global speed boost).' },
   },
   phases: {
     phase_1: 'Phase 1: Elevator Anchor',

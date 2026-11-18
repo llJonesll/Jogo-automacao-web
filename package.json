@@ -1,6 +1,6 @@
 {
   "name": "aetherforge-orbital-foundry",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "AETHERFORGE: Orbital Foundry - Browser factory automation and logistics game inspired by Factorio and Satisfactory",
   "type": "module",

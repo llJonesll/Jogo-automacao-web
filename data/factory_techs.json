@@ -35,7 +35,7 @@
         { "item": "concrete", "count": 20 }
       ],
       "unlocks_buildings": ["assembler", "solar_panel", "accumulator"],
-      "unlocks_features": ["blueprints"]
+      "unlocks_features": []
     },
     {
       "id": "tier_4_overclock",
