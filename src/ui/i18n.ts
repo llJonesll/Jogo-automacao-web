@@ -1,19 +1,31 @@
 import type { BuildingId, BuildingStatus, ItemId } from '../core/types';
 
 export type Locale = 'pt-BR' | 'en';
+export type ColorblindMode = 'default' | 'protanopia' | 'deuteranopia' | 'tritanopia';
+export type UiScale = 1 | 1.15 | 1.3 | 1.5;
 
 export interface LocalizationBundle {
+  page_title: string;
   title_sub: string;
   btn_new_factory: string;
   btn_continue: string;
   btn_demo: string;
   btn_colorblind: string;
+  btn_color_mode: string;
+  cb_modes: Record<ColorblindMode, string>;
+  btn_scale: string;
+  btn_reduced_motion: string;
+  state_on: string;
+  state_off: string;
   btn_lang: string;
+  btn_close: string;
   phase_label: string;
   phase_complete: string;
   load_stockpile: string;
+  skip_launch: string;
   tech_label: string;
   no_active_tech: string;
+  tech_focus_lab: string;
   power_gen: string;
   power_use: string;
   power_stored: string;
@@ -24,8 +36,10 @@ export interface LocalizationBundle {
   btn_blueprints: string;
   btn_tweak: string;
   btn_alt: string;
+  btn_power_overlay: string;
   btn_save: string;
   btn_mute: string;
+  audio_off_suffix: string;
   btn_help: string;
   cat_all: string;
   cat_logistics: string;
@@ -43,16 +57,21 @@ export interface LocalizationBundle {
   inspector_overclock_locked: string;
   inspector_geo_bonus: string;
   inspector_buffers: string;
+  buf_in: string;
+  buf_out: string;
   inspector_rotate: string;
   inspector_dismantle: string;
   btn_unlock_stockpile: string;
   unlocked: string;
   locked_prereq: string;
+  status_locked_short: string;
+  status_unaffordable_short: string;
   stats_stockpile: string;
   stats_rates: string;
   stats_diagnostics: string;
   stats_produced: string;
   stats_consumed: string;
+  unit_per_min: string;
   bp_capture: string;
   bp_starters: string;
   bp_saved: string;
@@ -60,7 +79,12 @@ export interface LocalizationBundle {
   bp_import_btn: string;
   bp_copy_btn: string;
   bp_stamp_btn: string;
+  bp_prefix: string;
+  bp_default_name: string;
+  bp_imported_name: string;
+  bp_starter_names: Record<string, string>;
   tweak_title: string;
+  a11y_section_title: string;
   tweak_reset: string;
   save_title: string;
   save_local: string;
@@ -70,19 +94,33 @@ export interface LocalizationBundle {
   victory_title: string;
   victory_desc: string;
   victory_continue: string;
+  victory_metric_ticks: string;
+  victory_metric_launches: string;
+  victory_metric_power: string;
+  victory_metric_buildings: string;
   help_title: string;
+  help_lines: string[];
   msg_saved: string;
   msg_loaded: string;
   msg_bp_copied: string;
   msg_bp_imported: string;
   msg_bp_invalid: string;
   msg_save_invalid: string;
+  msg_save_too_large: string;
+  msg_save_storage_failed: string;
+  msg_no_save_found: string;
   msg_no_materials: string;
   msg_tech_locked: string;
+  msg_tech_unlocked: string;
   msg_needs_ore: string;
   msg_needs_vent: string;
   msg_phase_loaded: string;
   msg_rocket_launch: string;
+  msg_launch_skipped: string;
+  msg_power_low: string;
+  msg_power_restored: string;
+  msg_gamepad_connected: string;
+  msg_gamepad_disconnected: string;
   title_hint: string;
   statuses: Record<BuildingStatus, string>;
   items: Record<ItemId, string>;
@@ -90,21 +128,37 @@ export interface LocalizationBundle {
   recipes: Record<string, string>;
   techs: Record<string, { name: string; desc: string }>;
   phases: Record<string, string>;
+  tweak_labels: Record<string, string>;
   tweak_descs: Record<string, string>;
 }
 
 const PT_BR: LocalizationBundle = {
+  page_title: 'AETHERFORGE: Fundição Orbital',
   title_sub: 'Fundição Orbital & Logística Industrial',
   btn_new_factory: 'Nova Fábrica',
   btn_continue: 'Continuar Save',
   btn_demo: 'Fábrica de Demonstração (Showcase)',
-  btn_colorblind: 'Alto Contraste',
+  btn_colorblind: 'Modo de Cores',
+  btn_color_mode: 'Cores',
+  cb_modes: {
+    default: 'Padrão',
+    protanopia: 'Protanopia',
+    deuteranopia: 'Deuteranopia',
+    tritanopia: 'Tritanopia',
+  },
+  btn_scale: 'Texto',
+  btn_reduced_motion: 'Mov. Reduzido',
+  state_on: 'Lig',
+  state_off: 'Desl',
   btn_lang: 'PT-BR',
+  btn_close: 'Fechar',
   phase_label: 'Elevador Orbital',
   phase_complete: 'Todas as Fases Concluídas!',
   load_stockpile: 'Carregar Foguete',
+  skip_launch: 'Pular Animação [Espaço/Enter]',
   tech_label: 'Pesquisa',
   no_active_tech: 'Pesquisas Concluídas',
+  tech_focus_lab: 'Focar Lab',
   power_gen: 'Geração',
   power_use: 'Demanda',
   power_stored: 'Bateria',
@@ -115,8 +169,10 @@ const PT_BR: LocalizationBundle = {
   btn_blueprints: 'Blueprints [B]',
   btn_tweak: 'Config [G]',
   btn_alt: 'Alt-Mode',
+  btn_power_overlay: 'Rede [V]',
   btn_save: 'Salvar',
   btn_mute: 'Som [M]',
+  audio_off_suffix: ' (MUDO)',
   btn_help: 'Ajuda [H]',
   cat_all: 'Tudo',
   cat_logistics: 'Logística',
@@ -134,16 +190,21 @@ const PT_BR: LocalizationBundle = {
   inspector_overclock_locked: 'Requer Tier 4: Controle de Overclock',
   inspector_geo_bonus: 'Ressonância Geotérmica: +35% Velocidade Grátis',
   inspector_buffers: 'Buffers & Estoque',
+  buf_in: 'ENT',
+  buf_out: 'SAÍ',
   inspector_rotate: 'Girar [R]',
   inspector_dismantle: 'Desmontar (100% Reembolso)',
   btn_unlock_stockpile: 'Desbloquear com Estoque',
   unlocked: 'Desbloqueado',
   locked_prereq: 'Requer Tier anterior',
+  status_locked_short: 'Bloqueado',
+  status_unaffordable_short: 'Falta recurso',
   stats_stockpile: 'Estoque Global do Hub Orbital',
   stats_rates: 'Fluxo Industrial (Últimos 60s / min)',
   stats_diagnostics: 'Diagnóstico de Gargalos',
   stats_produced: 'Produzido/min',
   stats_consumed: 'Consumido/min',
+  unit_per_min: '/min',
   bp_capture: 'Capturar Área do Mapa [Ctrl+C]',
   bp_starters: 'Blueprints Iniciais do Estúdio',
   bp_saved: 'Seus Blueprints Capturados',
@@ -151,7 +212,18 @@ const PT_BR: LocalizationBundle = {
   bp_import_btn: 'Importar Blueprint',
   bp_copy_btn: 'Copiar Texto',
   bp_stamp_btn: 'Carimbar',
-  tweak_title: 'Painel de Calibração (data/config.json)',
+  bp_prefix: 'BP',
+  bp_default_name: 'Projeto',
+  bp_imported_name: 'Importado',
+  bp_starter_names: {
+    'Linha Fundição + Prensa 2x': 'Linha Fundição + Prensa 2x',
+    'Manifold de Circuitos': 'Manifold de Circuitos',
+    'Bloco Solar + Acumulador': 'Bloco Solar + Acumulador',
+    Projeto: 'Projeto',
+    Importado: 'Importado',
+  },
+  tweak_title: 'Configurações & Calibração',
+  a11y_section_title: 'Acessibilidade & Exibição',
   tweak_reset: 'Restaurar Padrões',
   save_title: 'Gerenciador de Save & Mundo',
   save_local: 'Salvar no Navegador',
@@ -162,20 +234,46 @@ const PT_BR: LocalizationBundle = {
   victory_desc:
     'Todas as 5 Fases do Elevador Orbital foram lançadas com sucesso. Sua linha de produção automatizada domina o planeta.',
   victory_continue: 'Continuar Megafábrica (Sandbox)',
+  victory_metric_ticks: 'Ticks',
+  victory_metric_launches: 'Lançamentos',
+  victory_metric_power: 'Energia',
+  victory_metric_buildings: 'Construções',
   help_title: 'Guia de Controle & Cadeias Produtivas',
+  help_lines: [
+    'WASD / Setas / Botão do Meio: Mover câmera | Scroll: Zoom | Home: Centralizar no Hub',
+    'Cursor por Teclado: I/J/K/L move o cursor | Enter constrói/minera/inspeciona | Delete/Backspace desmonta',
+    'Clique Esq. e Arraste (com Esteira): Cria curvas automáticas contínuas',
+    'Clique Esq. (Cursor livre ou Laser sobre jazida): Mineração manual',
+    'Botão Direito (ou arraste): Desmontar com 100% de reembolso',
+    'R / Shift+R: Girar construção ou blueprint | Q: Pipeta sob o cursor',
+    '1-9, 0: Barra rápida | [ / ]: Trocar categoria | Esc: Limpar ferramenta / fechar modal',
+    'Alt: Alt-Mode | V: Camada da Rede Elétrica | Espaço: Pausar ou pular lançamento',
+    'T: Tech & Elevador | P: Estatísticas | B / Ctrl+C: Blueprints | G: Config & Acessibilidade',
+    'Controle (Gamepad): Analógico Esq. move câmera | Dir./D-Pad cursor (ou navega menus) | LT/RT zoom | A confirma | B desmonta/fecha | X gira | Y pipeta | LB/RB barra rápida | Select Alt-Mode | Start Ajuda',
+    'Ressonância Geotérmica: Máquinas ao lado de fissuras ganham +35% velocidade grátis',
+  ],
   msg_saved: 'Progresso salvo no navegador.',
   msg_loaded: 'Save carregado com sucesso.',
   msg_bp_copied: 'Blueprint copiado! Clique no mapa para carimbar (R gira).',
   msg_bp_imported: 'Blueprint validado e carregado para carimbo.',
   msg_bp_invalid: 'Blueprint inválido ou corrompido.',
   msg_save_invalid: 'Arquivo de save inválido ou corrompido.',
+  msg_save_too_large: 'Arquivo excede o limite de 4 MB.',
+  msg_save_storage_failed: 'Falha ao salvar no navegador (limite de espaço).',
+  msg_no_save_found: 'Nenhum save salvo encontrado no navegador.',
   msg_no_materials: 'Recursos insuficientes no estoque do Hub.',
   msg_tech_locked: 'Desbloqueie a tecnologia correspondente primeiro.',
+  msg_tech_unlocked: 'Tecnologia desbloqueada',
   msg_needs_ore: 'Extratores precisam ser posicionados sobre uma jazida mineral.',
   msg_needs_vent: 'Usina Geotérmica exige uma fissura de magma.',
   msg_phase_loaded: 'Carga transferida para o módulo orbital.',
   msg_rocket_launch: 'LANÇAMENTO ORBITAL CONFIRMADO! Próxima fase desbloqueada.',
-  title_hint: 'Arraste esteiras com o mouse | R gira | Q pipeta | Alt exibe receitas',
+  msg_launch_skipped: 'Animação de lançamento avançada.',
+  msg_power_low: 'Alerta: Demanda elétrica excede geração (<100%).',
+  msg_power_restored: 'Rede elétrica estabilizada em 100%.',
+  msg_gamepad_connected: 'Controle conectado',
+  msg_gamepad_disconnected: 'Controle desconectado',
+  title_hint: 'Mouse/Esteiras | Teclado: WASD + IJKL + Enter | Controle compatível',
   statuses: {
     working: 'Operando',
     idle: 'Em Espera',
@@ -259,6 +357,15 @@ const PT_BR: LocalizationBundle = {
     phase_4: 'Fase 4: Telemetria de Silício',
     phase_5: 'Fase 5: Núcleo de Propulsão Quântica',
   },
+  tweak_labels: {
+    seed: 'Semente do Planeta',
+    mining_speed_mult: 'Velocidade de Mineração',
+    belt_speed_mult: 'Velocidade das Esteiras',
+    craft_speed_mult: 'Velocidade de Fabricação',
+    power_output_mult: 'Geração de Energia',
+    day_cycle_seconds: 'Duração do Ciclo Dia/Noite (s)',
+    free_build: 'Construção Livre (Sandbox)',
+  },
   tweak_descs: {
     seed: 'Semente determinística para geração de jazidas e fissuras geotérmicas',
     mining_speed_mult: 'Multiplicador global de velocidade dos Extratores Mk.I e Mk.II',
@@ -271,17 +378,32 @@ const PT_BR: LocalizationBundle = {
 };
 
 const EN: LocalizationBundle = {
+  page_title: 'AETHERFORGE: Orbital Foundry',
   title_sub: 'Orbital Foundry & Industrial Logistics',
   btn_new_factory: 'New Factory',
   btn_continue: 'Continue Save',
   btn_demo: 'Demo Factory (Showcase)',
-  btn_colorblind: 'High Contrast',
+  btn_colorblind: 'Color Mode',
+  btn_color_mode: 'Colors',
+  cb_modes: {
+    default: 'Default',
+    protanopia: 'Protanopia',
+    deuteranopia: 'Deuteranopia',
+    tritanopia: 'Tritanopia',
+  },
+  btn_scale: 'Text',
+  btn_reduced_motion: 'Reduced Motion',
+  state_on: 'On',
+  state_off: 'Off',
   btn_lang: 'EN',
+  btn_close: 'Close',
   phase_label: 'Orbital Elevator',
   phase_complete: 'All Orbital Phases Launched!',
   load_stockpile: 'Load Rocket',
+  skip_launch: 'Skip Launch [Space/Enter]',
   tech_label: 'Research',
   no_active_tech: 'All Techs Researched',
+  tech_focus_lab: 'Focus Lab',
   power_gen: 'Output',
   power_use: 'Demand',
   power_stored: 'Battery',
@@ -292,8 +414,10 @@ const EN: LocalizationBundle = {
   btn_blueprints: 'Blueprints [B]',
   btn_tweak: 'Tweak [G]',
   btn_alt: 'Alt-Mode',
+  btn_power_overlay: 'Power [V]',
   btn_save: 'Save',
   btn_mute: 'Audio [M]',
+  audio_off_suffix: ' (OFF)',
   btn_help: 'Help [H]',
   cat_all: 'All',
   cat_logistics: 'Logistics',
@@ -311,16 +435,21 @@ const EN: LocalizationBundle = {
   inspector_overclock_locked: 'Requires Tier 4: Overclock Control',
   inspector_geo_bonus: 'Geothermal Resonance: +35% Free Speed',
   inspector_buffers: 'Buffers & Inventory',
+  buf_in: 'IN',
+  buf_out: 'OUT',
   inspector_rotate: 'Rotate [R]',
   inspector_dismantle: 'Dismantle (100% Refund)',
   btn_unlock_stockpile: 'Unlock from Stockpile',
   unlocked: 'Unlocked',
   locked_prereq: 'Requires previous Tier',
+  status_locked_short: 'Locked',
+  status_unaffordable_short: 'Insufficient stock',
   stats_stockpile: 'Global Orbital Hub Stockpile',
   stats_rates: 'Industrial Throughput (Rolling 60s / min)',
   stats_diagnostics: 'Bottleneck Diagnostics',
   stats_produced: 'Produced/min',
   stats_consumed: 'Consumed/min',
+  unit_per_min: '/min',
   bp_capture: 'Capture Map Region [Ctrl+C]',
   bp_starters: 'Studio Starter Blueprints',
   bp_saved: 'Your Captured Blueprints',
@@ -328,7 +457,18 @@ const EN: LocalizationBundle = {
   bp_import_btn: 'Import Blueprint',
   bp_copy_btn: 'Copy String',
   bp_stamp_btn: 'Stamp',
-  tweak_title: 'Studio Tuning Panel (data/config.json)',
+  bp_prefix: 'BP',
+  bp_default_name: 'Blueprint',
+  bp_imported_name: 'Imported',
+  bp_starter_names: {
+    'Linha Fundição + Prensa 2x': '2x Smelter + Constructor Line',
+    'Manifold de Circuitos': 'Circuit Manifold',
+    'Bloco Solar + Acumulador': 'Solar + Accumulator Block',
+    Projeto: 'Blueprint',
+    Importado: 'Imported',
+  },
+  tweak_title: 'Settings & Studio Tuning',
+  a11y_section_title: 'Accessibility & Display',
   tweak_reset: 'Reset Defaults',
   save_title: 'Save & World Manager',
   save_local: 'Save to Browser',
@@ -339,20 +479,46 @@ const EN: LocalizationBundle = {
   victory_desc:
     'All 5 Orbital Cargo Phases have launched successfully. Your automated foundry spans the exoplanet.',
   victory_continue: 'Continue Megafactory (Sandbox)',
+  victory_metric_ticks: 'Ticks',
+  victory_metric_launches: 'Launches',
+  victory_metric_power: 'Power',
+  victory_metric_buildings: 'Buildings',
   help_title: 'Controls & Production Chain Guide',
+  help_lines: [
+    'WASD / Arrows / Middle-Drag: Pan camera | Wheel: Zoom | Home: Center on Hub',
+    'Keyboard Cursor: I/J/K/L moves tile cursor | Enter places/mines/inspects | Delete/Backspace dismantles',
+    'Left Click & Drag (Belt selected): Auto-orient conveyor line & corners',
+    'Left Click (Empty Cursor or Mining Laser on Ore): Manual Mining Laser',
+    'Right Click / Drag: Dismantle building with 100% refund',
+    'R / Shift+R: Rotate building or blueprint | Q: Pipette tool from hovered building',
+    '1-9, 0: Quick select hotbar slot | [ / ]: Switch category | Esc: Clear tool / close modal',
+    'Alt: Alt-Mode | V: Power Overlay | Space: Pause or skip rocket animation',
+    'T: Tech & Orbital Phases | P: Stats | B / Ctrl+C: Blueprints | G: Settings & Accessibility',
+    'Gamepad: Left Stick pan | Right Stick/D-Pad cursor (or modal nav) | LT/RT zoom | A confirm | B dismantle/close | X rotate | Y pipette | LB/RB cycle slots | Select Alt-Mode | Start Help',
+    'Geothermal Resonance: Machines adjacent to magma vents run +35% faster for free',
+  ],
   msg_saved: 'Factory saved to browser storage.',
   msg_loaded: 'Save loaded successfully.',
   msg_bp_copied: 'Blueprint ready! Click map to stamp (R rotates).',
   msg_bp_imported: 'Blueprint validated and ready to stamp.',
   msg_bp_invalid: 'Invalid or corrupted blueprint string.',
   msg_save_invalid: 'Invalid or corrupted save file.',
+  msg_save_too_large: 'Save file exceeds the 4 MB size limit.',
+  msg_save_storage_failed: 'Failed to save to browser storage (quota exceeded).',
+  msg_no_save_found: 'No saved factory found in browser storage.',
   msg_no_materials: 'Insufficient materials in Hub stockpile.',
   msg_tech_locked: 'Research the required technology tier first.',
+  msg_tech_unlocked: 'Technology unlocked',
   msg_needs_ore: 'Miners must be placed on an ore deposit.',
   msg_needs_vent: 'Geothermal Plant requires a magma vent tile.',
   msg_phase_loaded: 'Cargo loaded into orbital rocket pod.',
   msg_rocket_launch: 'ORBITAL LAUNCH CONFIRMED! Next cargo phase unlocked.',
-  title_hint: 'Drag belts with mouse | R rotate | Q pipette | Alt info overlay',
+  msg_launch_skipped: 'Rocket launch animation skipped.',
+  msg_power_low: 'Warning: Power demand exceeds generation (<100%).',
+  msg_power_restored: 'Power grid stabilized at 100%.',
+  msg_gamepad_connected: 'Gamepad connected',
+  msg_gamepad_disconnected: 'Gamepad disconnected',
+  title_hint: 'Mouse/Belts | Keyboard: WASD + IJKL + Enter | Gamepad supported',
   statuses: {
     working: 'Working',
     idle: 'Idle',
@@ -435,6 +601,15 @@ const EN: LocalizationBundle = {
     phase_3: 'Phase 3: Structural Matrix',
     phase_4: 'Phase 4: Silicon Telemetry',
     phase_5: 'Phase 5: Quantum Propulsion Core',
+  },
+  tweak_labels: {
+    seed: 'Planet Seed',
+    mining_speed_mult: 'Mining Speed Multiplier',
+    belt_speed_mult: 'Belt Speed Multiplier',
+    craft_speed_mult: 'Crafting Speed Multiplier',
+    power_output_mult: 'Power Output Multiplier',
+    day_cycle_seconds: 'Day/Night Cycle Duration (s)',
+    free_build: 'Free Build (Sandbox)',
   },
   tweak_descs: {
     seed: 'Deterministic PRNG seed for exoplanet vein and geothermal rift generation',
