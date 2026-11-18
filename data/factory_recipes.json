@@ -1,0 +1,163 @@
+{
+  "smelt_iron": {
+    "id": "smelt_iron",
+    "building": "smelter",
+    "inputs": [
+      { "item": "iron_ore", "count": 1 }
+    ],
+    "outputs": [
+      { "item": "iron_ingot", "count": 1 }
+    ],
+    "duration": 1.5
+  },
+  "smelt_copper": {
+    "id": "smelt_copper",
+    "building": "smelter",
+    "inputs": [
+      { "item": "copper_ore", "count": 1 }
+    ],
+    "outputs": [
+      { "item": "copper_ingot", "count": 1 }
+    ],
+    "duration": 1.5
+  },
+  "kiln_concrete": {
+    "id": "kiln_concrete",
+    "building": "smelter",
+    "inputs": [
+      { "item": "stone", "count": 2 }
+    ],
+    "outputs": [
+      { "item": "concrete", "count": 1 }
+    ],
+    "duration": 2.0
+  },
+  "smelt_glass": {
+    "id": "smelt_glass",
+    "building": "smelter",
+    "inputs": [
+      { "item": "quartz", "count": 1 }
+    ],
+    "outputs": [
+      { "item": "glass_crystal", "count": 1 }
+    ],
+    "duration": 2.0
+  },
+  "press_plate": {
+    "id": "press_plate",
+    "building": "constructor",
+    "inputs": [
+      { "item": "iron_ingot", "count": 1 }
+    ],
+    "outputs": [
+      { "item": "iron_plate", "count": 1 }
+    ],
+    "duration": 1.0
+  },
+  "cut_gear": {
+    "id": "cut_gear",
+    "building": "constructor",
+    "inputs": [
+      { "item": "iron_ingot", "count": 2 }
+    ],
+    "outputs": [
+      { "item": "iron_gear", "count": 1 }
+    ],
+    "duration": 1.5
+  },
+  "draw_wire": {
+    "id": "draw_wire",
+    "building": "constructor",
+    "inputs": [
+      { "item": "copper_ingot", "count": 1 }
+    ],
+    "outputs": [
+      { "item": "copper_wire", "count": 2 }
+    ],
+    "duration": 1.0
+  },
+  "forge_steel": {
+    "id": "forge_steel",
+    "building": "foundry",
+    "inputs": [
+      { "item": "iron_ingot", "count": 2 },
+      { "item": "coal", "count": 1 }
+    ],
+    "outputs": [
+      { "item": "steel_beam", "count": 1 }
+    ],
+    "duration": 2.5
+  },
+  "dope_silicon": {
+    "id": "dope_silicon",
+    "building": "foundry",
+    "inputs": [
+      { "item": "glass_crystal", "count": 1 },
+      { "item": "coal", "count": 1 }
+    ],
+    "outputs": [
+      { "item": "silicon_wafer", "count": 1 }
+    ],
+    "duration": 2.0
+  },
+  "assemble_circuit": {
+    "id": "assemble_circuit",
+    "building": "assembler",
+    "inputs": [
+      { "item": "iron_plate", "count": 1 },
+      { "item": "copper_wire", "count": 2 }
+    ],
+    "outputs": [
+      { "item": "circuit", "count": 1 }
+    ],
+    "duration": 2.0
+  },
+  "assemble_rotor": {
+    "id": "assemble_rotor",
+    "building": "assembler",
+    "inputs": [
+      { "item": "iron_plate", "count": 2 },
+      { "item": "iron_gear", "count": 2 }
+    ],
+    "outputs": [
+      { "item": "rotor", "count": 1 }
+    ],
+    "duration": 2.5
+  },
+  "assemble_frame": {
+    "id": "assemble_frame",
+    "building": "assembler",
+    "inputs": [
+      { "item": "steel_beam", "count": 2 },
+      { "item": "rotor", "count": 1 }
+    ],
+    "outputs": [
+      { "item": "modular_frame", "count": 1 }
+    ],
+    "duration": 3.5
+  },
+  "assemble_processor": {
+    "id": "assemble_processor",
+    "building": "assembler",
+    "inputs": [
+      { "item": "circuit", "count": 2 },
+      { "item": "silicon_wafer", "count": 1 }
+    ],
+    "outputs": [
+      { "item": "processor", "count": 1 }
+    ],
+    "duration": 3.5
+  },
+  "assemble_quantum": {
+    "id": "assemble_quantum",
+    "building": "assembler",
+    "inputs": [
+      { "item": "modular_frame", "count": 1 },
+      { "item": "processor", "count": 2 }
+    ],
+    "outputs": [
+      { "item": "quantum_core", "count": 1 }
+    ],
+    "duration": 5.0
+  }
+}

@@ -1,0 +1,154 @@
+{
+  "iron_ore": {
+    "id": "iron_ore",
+    "category": "raw",
+    "tier": 0,
+    "color": "#6b88a8",
+    "accent": "#9ebbd9",
+    "fuel_value": 0
+  },
+  "copper_ore": {
+    "id": "copper_ore",
+    "category": "raw",
+    "tier": 0,
+    "color": "#c96d44",
+    "accent": "#f19b6e",
+    "fuel_value": 0
+  },
+  "coal": {
+    "id": "coal",
+    "category": "raw",
+    "tier": 0,
+    "color": "#2f333a",
+    "accent": "#575e6b",
+    "fuel_value": 100
+  },
+  "stone": {
+    "id": "stone",
+    "category": "raw",
+    "tier": 0,
+    "color": "#878b91",
+    "accent": "#b8bcc2",
+    "fuel_value": 0
+  },
+  "quartz": {
+    "id": "quartz",
+    "category": "raw",
+    "tier": 1,
+    "color": "#9b6bc9",
+    "accent": "#dab6ff",
+    "fuel_value": 0
+  },
+  "iron_ingot": {
+    "id": "iron_ingot",
+    "category": "refined",
+    "tier": 1,
+    "color": "#98a9bc",
+    "accent": "#dce8f5",
+    "fuel_value": 0
+  },
+  "copper_ingot": {
+    "id": "copper_ingot",
+    "category": "refined",
+    "tier": 1,
+    "color": "#d97848",
+    "accent": "#ffc099",
+    "fuel_value": 0
+  },
+  "concrete": {
+    "id": "concrete",
+    "category": "refined",
+    "tier": 1,
+    "color": "#9ca3ad",
+    "accent": "#cfd6e0",
+    "fuel_value": 0
+  },
+  "glass_crystal": {
+    "id": "glass_crystal",
+    "category": "refined",
+    "tier": 2,
+    "color": "#73d2de",
+    "accent": "#cff9ff",
+    "fuel_value": 0
+  },
+  "steel_beam": {
+    "id": "steel_beam",
+    "category": "refined",
+    "tier": 2,
+    "color": "#5f7082",
+    "accent": "#a4b8cc",
+    "fuel_value": 0
+  },
+  "silicon_wafer": {
+    "id": "silicon_wafer",
+    "category": "refined",
+    "tier": 3,
+    "color": "#445d8a",
+    "accent": "#8cb3f5",
+    "fuel_value": 0
+  },
+  "iron_plate": {
+    "id": "iron_plate",
+    "category": "manufactured",
+    "tier": 1,
+    "color": "#7b91a8",
+    "accent": "#c6daed",
+    "fuel_value": 0
+  },
+  "iron_gear": {
+    "id": "iron_gear",
+    "category": "manufactured",
+    "tier": 1,
+    "color": "#8c9fb3",
+    "accent": "#dde7f0",
+    "fuel_value": 0
+  },
+  "copper_wire": {
+    "id": "copper_wire",
+    "category": "manufactured",
+    "tier": 1,
+    "color": "#e37e44",
+    "accent": "#ffbe94",
+    "fuel_value": 0
+  },
+  "circuit": {
+    "id": "circuit",
+    "category": "manufactured",
+    "tier": 2,
+    "color": "#2f9e62",
+    "accent": "#6df2a7",
+    "fuel_value": 0
+  },
+  "rotor": {
+    "id": "rotor",
+    "category": "manufactured",
+    "tier": 2,
+    "color": "#d48a28",
+    "accent": "#ffd07a",
+    "fuel_value": 0
+  },
+  "modular_frame": {
+    "id": "modular_frame",
+    "category": "manufactured",
+    "tier": 3,
+    "color": "#58708a",
+    "accent": "#9ec3e8",
+    "fuel_value": 0
+  },
+  "processor": {
+    "id": "processor",
+    "category": "manufactured",
+    "tier": 4,
+    "color": "#1c78c0",
+    "accent": "#66c7ff",
+    "fuel_value": 0
+  },
+  "quantum_core": {
+    "id": "quantum_core",
+    "category": "manufactured",
+    "tier": 5,
+    "color": "#8b3dff",
+    "accent": "#4ef2ff",
+    "fuel_value": 0
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "seed": {
+    "value": 42026,
+    "min": 1,
+    "max": 999999,
+    "step": 1,
+    "description": "Deterministic PRNG seed for exoplanet vein and geothermal rift generation"
+  },
+  "mining_speed_mult": {
+    "value": 1.0,
+    "min": 0.25,
+    "max": 5.0,
+    "step": 0.25,
+    "description": "Global extraction speed multiplier for Mk.I and Mk.II miners"
+  },
+  "belt_speed_mult": {
+    "value": 1.0,
+    "min": 0.5,
+    "max": 4.0,
+    "step": 0.25,
+    "description": "Global speed multiplier for belts, underground tunnels, splitters, and mergers"
+  },
+  "craft_speed_mult": {
+    "value": 1.0,
+    "min": 0.25,
+    "max": 5.0,
+    "step": 0.25,
+    "description": "Global crafting speed multiplier for smelters, constructors, foundries, and assemblers"
+  },
+  "power_output_mult": {
+    "value": 1.0,
+    "min": 0.5,
+    "max": 5.0,
+    "step": 0.25,
+    "description": "Global power generation multiplier for RTG, coal, solar, and geothermal plants"
+  },
+  "day_cycle_seconds": {
+    "value": 180,
+    "min": 30,
+    "max": 600,
+    "step": 30,
+    "description": "Full planet day/night rotation duration in simulation seconds"
+  },
+  "free_build": {
+    "value": 0,
+    "min": 0,
+    "max": 1,
+    "step": 1,
+    "description": "Sandbox toggle (1 = construct buildings without consuming stockpile resources)"
+  }
+}

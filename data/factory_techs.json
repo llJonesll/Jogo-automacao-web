@@ -1,0 +1,123 @@
+{
+  "techs": [
+    {
+      "id": "tier_1_logistics",
+      "tier": 1,
+      "prerequisites": [],
+      "cost": [
+        { "item": "iron_plate", "count": 25 },
+        { "item": "copper_wire", "count": 20 }
+      ],
+      "unlocks_buildings": ["belt_mk2", "tunnel", "splitter", "merger", "inserter"],
+      "unlocks_features": []
+    },
+    {
+      "id": "tier_2_metallurgy",
+      "tier": 2,
+      "prerequisites": ["tier_1_logistics"],
+      "cost": [
+        { "item": "iron_plate", "count": 40 },
+        { "item": "iron_gear", "count": 25 },
+        { "item": "concrete", "count": 20 }
+      ],
+      "unlocks_buildings": ["foundry", "coal_generator", "research_lab"],
+      "unlocks_features": []
+    },
+    {
+      "id": "tier_3_electronics",
+      "tier": 3,
+      "prerequisites": ["tier_2_metallurgy"],
+      "cost": [
+        { "item": "steel_beam", "count": 25 },
+        { "item": "glass_crystal", "count": 20 },
+        { "item": "copper_wire", "count": 40 }
+      ],
+      "unlocks_buildings": ["assembler", "solar_panel", "accumulator"],
+      "unlocks_features": ["blueprints"]
+    },
+    {
+      "id": "tier_4_overclock",
+      "tier": 4,
+      "prerequisites": ["tier_3_electronics"],
+      "cost": [
+        { "item": "circuit", "count": 30 },
+        { "item": "rotor", "count": 20 },
+        { "item": "steel_beam", "count": 30 }
+      ],
+      "unlocks_buildings": ["belt_mk3", "miner_mk2", "geothermal_plant"],
+      "unlocks_features": ["overclock"]
+    },
+    {
+      "id": "tier_5_quantum",
+      "tier": 5,
+      "prerequisites": ["tier_4_overclock"],
+      "cost": [
+        { "item": "modular_frame", "count": 20 },
+        { "item": "silicon_wafer", "count": 25 },
+        { "item": "circuit", "count": 40 }
+      ],
+      "unlocks_buildings": [],
+      "unlocks_features": ["quantum_recipes"]
+    },
+    {
+      "id": "orbital_ascension",
+      "tier": 6,
+      "prerequisites": ["tier_5_quantum"],
+      "cost": [
+        { "item": "processor", "count": 25 },
+        { "item": "quantum_core", "count": 10 }
+      ],
+      "unlocks_buildings": [],
+      "unlocks_features": ["orbital_overdrive"]
+    }
+  ],
+  "orbital_phases": [
+    {
+      "phase": 1,
+      "id": "phase_1",
+      "requirements": [
+        { "item": "iron_plate", "count": 40 },
+        { "item": "iron_gear", "count": 20 },
+        { "item": "copper_wire", "count": 40 },
+        { "item": "concrete", "count": 20 }
+      ]
+    },
+    {
+      "phase": 2,
+      "id": "phase_2",
+      "requirements": [
+        { "item": "steel_beam", "count": 35 },
+        { "item": "glass_crystal", "count": 25 },
+        { "item": "rotor", "count": 20 },
+        { "item": "circuit", "count": 25 }
+      ]
+    },
+    {
+      "phase": 3,
+      "id": "phase_3",
+      "requirements": [
+        { "item": "modular_frame", "count": 25 },
+        { "item": "circuit", "count": 50 },
+        { "item": "concrete", "count": 60 }
+      ]
+    },
+    {
+      "phase": 4,
+      "id": "phase_4",
+      "requirements": [
+        { "item": "silicon_wafer", "count": 40 },
+        { "item": "processor", "count": 30 },
+        { "item": "modular_frame", "count": 35 }
+      ]
+    },
+    {
+      "phase": 5,
+      "id": "phase_5",
+      "requirements": [
+        { "item": "quantum_core", "count": 25 },
+        { "item": "processor", "count": 40 },
+        { "item": "steel_beam", "count": 80 }
+      ]
+    }
+  ]
+}

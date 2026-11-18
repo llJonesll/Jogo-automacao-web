@@ -1,0 +1,31 @@
+project:
+  name: "AETHERFORGE: Orbital Foundry"
+  stage: "Release"
+  goal: "portfolio"
+
+engine:
+  name: "Web"
+  version: "6.2.0"
+  language: "TypeScript"
+  rendering: "Canvas 2D"
+  physics: "none"
+
+modes:
+  rigor: "standard"
+  workflow: "standard"
+  automation: "autonomous"
+
+platform:
+  cert_tier: "none"
+
+naming:
+  classes: PascalCase
+  variables: camelCase
+  constants: SCREAMING_SNAKE
+  signals: on_event_name
+  files: kebab-case
+
+commands:
+  build: "npm run build"
+  test: "npm test"
+  run: "npm run dev"
