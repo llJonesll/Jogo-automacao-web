@@ -78,6 +78,7 @@ export interface ItemDef {
 export interface RecipeDef {
   id: string;
   building: 'smelter' | 'constructor' | 'foundry' | 'assembler';
+  required_tech?: string;
   inputs: ItemStack[];
   outputs: ItemStack[];
   duration: number;

@@ -27,7 +27,7 @@
     "speed": 8.0,
     "power_mw": 0,
     "generates_mw": 0,
-    "cost": [{ "item": "steel_beam", "count": 1 }, { "item": "circuit", "count": 1 }]
+    "cost": [{ "item": "steel_beam", "count": 2 }, { "item": "circuit", "count": 2 }]
   },
   "tunnel": {
     "id": "tunnel",
@@ -45,7 +45,7 @@
     "category": "logistics",
     "size": 1,
     "tier": 1,
-    "speed": 4.0,
+    "speed": 8.0,
     "power_mw": 0,
     "generates_mw": 0,
     "cost": [{ "item": "iron_plate", "count": 4 }, { "item": "copper_wire", "count": 2 }]
@@ -55,7 +55,7 @@
     "category": "logistics",
     "size": 1,
     "tier": 1,
-    "speed": 4.0,
+    "speed": 8.0,
     "power_mw": 0,
     "generates_mw": 0,
     "cost": [{ "item": "iron_plate", "count": 4 }, { "item": "iron_gear", "count": 2 }]
@@ -100,7 +100,7 @@
     "power_mw": 5.0,
     "generates_mw": 0,
     "requires_resource": "ore",
-    "cost": [{ "item": "steel_beam", "count": 4 }, { "item": "rotor", "count": 2 }, { "item": "circuit", "count": 2 }]
+    "cost": [{ "item": "steel_beam", "count": 4 }, { "item": "rotor", "count": 2 }, { "item": "processor", "count": 2 }]
   },
   "smelter": {
     "id": "smelter",
@@ -140,7 +140,7 @@
     "speed": 1.0,
     "power_mw": 12.0,
     "generates_mw": 0,
-    "cost": [{ "item": "steel_beam", "count": 4 }, { "item": "rotor", "count": 3 }, { "item": "circuit", "count": 4 }]
+    "cost": [{ "item": "steel_beam", "count": 4 }, { "item": "rotor", "count": 3 }, { "item": "circuit", "count": 4 }, { "item": "concrete", "count": 6 }]
   },
   "coal_generator": {
     "id": "coal_generator",
@@ -158,7 +158,7 @@
     "size": 1,
     "tier": 3,
     "power_mw": 0,
-    "generates_mw": 8.0,
+    "generates_mw": 14.0,
     "cost": [{ "item": "steel_beam", "count": 3 }, { "item": "glass_crystal", "count": 4 }, { "item": "circuit", "count": 2 }]
   },
   "accumulator": {
@@ -168,9 +168,9 @@
     "tier": 3,
     "power_mw": 0,
     "generates_mw": 0,
-    "energy_capacity_mj": 120.0,
-    "charge_rate_mw": 10.0,
-    "cost": [{ "item": "steel_beam", "count": 3 }, { "item": "copper_wire", "count": 8 }, { "item": "circuit", "count": 2 }]
+    "energy_capacity_mj": 180.0,
+    "charge_rate_mw": 15.0,
+    "cost": [{ "item": "steel_beam", "count": 2 }, { "item": "copper_wire", "count": 6 }, { "item": "circuit", "count": 2 }]
   },
   "geothermal_plant": {
     "id": "geothermal_plant",
@@ -180,7 +180,7 @@
     "power_mw": 0,
     "generates_mw": 60.0,
     "requires_resource": "geothermal_vent",
-    "cost": [{ "item": "modular_frame", "count": 3 }, { "item": "silicon_wafer", "count": 4 }, { "item": "copper_wire", "count": 10 }]
+    "cost": [{ "item": "modular_frame", "count": 3 }, { "item": "silicon_wafer", "count": 4 }, { "item": "concrete", "count": 10 }, { "item": "processor", "count": 2 }]
   },
   "research_lab": {
     "id": "research_lab",
@@ -198,7 +198,7 @@
     "size": 3,
     "tier": 0,
     "power_mw": 0,
-    "generates_mw": 15.0,
+    "generates_mw": 20.0,
     "cost": []
   }
 }

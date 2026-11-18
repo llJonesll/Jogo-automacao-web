@@ -1,4 +1,14 @@
-import { BUILDINGS, RECIPES, rotateDirCW } from '../core/data';
+/**
+ * Blueprint capture, 90-degree rotation, stamping, and Base64 (`AFBP1:`) trust-boundary codec.
+ * Architecture: `docs/architecture/architecture.md` (zero DOM imports; strict input validation).
+ */
+import {
+  RECIPES,
+  VALID_BUILDING_IDS,
+  VALID_RECIPE_IDS,
+  isProcessorType,
+  rotateDirCW,
+} from '../core/data';
 import type {
   BlueprintData,
   BlueprintEntry,
@@ -7,9 +17,26 @@ import type {
   GameConfig,
   WorldState,
 } from '../core/types';
-import { getBuildingAt, inBounds, isHubTile, placeBuilding } from './world';
+import {
+  CLOCK_MAX,
+  CLOCK_MIN,
+  getBuildingAt,
+  inBounds,
+  isFeatureUnlocked,
+  isHubTile,
+  placeBuilding,
+} from './world';
 
 const BP_PREFIX = 'AFBP1:';
+const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+function isPlainObject(val: unknown): val is Record<string, unknown> {
+  return Boolean(val) && typeof val === 'object' && !Array.isArray(val);
+}
+
+function isSafeKey(k: string): boolean {
+  return !FORBIDDEN_KEYS.has(k);
+}
 
 export function createBlueprint(
   world: WorldState,
@@ -94,6 +121,7 @@ export function placeBlueprint(
     return scoreA - scoreB;
   });
 
+  const canClock = config.free_build.value >= 1 || isFeatureUnlocked(world, 'overclock');
   let placed = 0;
   let skipped = 0;
 
@@ -104,9 +132,11 @@ export function placeBlueprint(
       skipped++;
       continue;
     }
+    const safeClock =
+      e.clock !== undefined ? (canClock ? Math.max(CLOCK_MIN, Math.min(CLOCK_MAX, e.clock)) : 1.0) : undefined;
     const res = placeBuilding(world, e.type, tx, ty, e.dir, config, {
       recipeId: e.recipeId,
-      clock: e.clock,
+      clock: safeClock,
     });
     if (res.ok) placed++;
     else skipped++;
@@ -130,13 +160,17 @@ function base64ToUtf8(b64: string): string {
   for (let i = 0; i < bin.length; i++) {
     bytes[i] = bin.charCodeAt(i);
   }
-  return new TextDecoder().decode(bytes);
+  return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
 }
 
 export function encodeBlueprint(bp: BlueprintData): string {
   return BP_PREFIX + utf8ToBase64(JSON.stringify(bp));
 }
 
+/**
+ * Strictly validates an untrusted `AFBP1:` Base64 blueprint string.
+ * Rejects root arrays, malformed UTF-8, duplicate `(dx, dy)` coords, and building-recipe mismatches.
+ */
 export function decodeBlueprint(
   raw: string
 ): { ok: true; blueprint: BlueprintData } | { ok: false; error: string } {
@@ -154,11 +188,11 @@ export function decodeBlueprint(
     return { ok: false, error: 'malformed_payload' };
   }
 
-  if (!parsed || typeof parsed !== 'object') {
+  if (!isPlainObject(parsed)) {
     return { ok: false, error: 'invalid_object' };
   }
 
-  const obj = parsed as Record<string, unknown>;
+  const obj = parsed;
   const width = obj.width;
   const height = obj.height;
   if (
@@ -175,10 +209,16 @@ export function decodeBlueprint(
     return { ok: false, error: 'invalid_dimensions' };
   }
 
+  if (obj.entries.length > width * height) {
+    return { ok: false, error: 'too_many_entries' };
+  }
+
   const entries: BlueprintEntry[] = [];
+  const seenCoords = new Set<number>();
+
   for (const item of obj.entries) {
-    if (!item || typeof item !== 'object') return { ok: false, error: 'invalid_entry' };
-    const e = item as Record<string, unknown>;
+    if (!isPlainObject(item)) return { ok: false, error: 'invalid_entry' };
+    const e = item;
     if (
       typeof e.dx !== 'number' ||
       typeof e.dy !== 'number' ||
@@ -191,23 +231,43 @@ export function decodeBlueprint(
     ) {
       return { ok: false, error: 'entry_out_of_bounds' };
     }
-    if (typeof e.type !== 'string' || !(e.type in BUILDINGS) || e.type === 'orbital_hub') {
+
+    const coordKey = e.dy * width + e.dx;
+    if (seenCoords.has(coordKey)) {
+      return { ok: false, error: 'duplicate_entry' };
+    }
+    seenCoords.add(coordKey);
+
+    if (
+      typeof e.type !== 'string' ||
+      !VALID_BUILDING_IDS.has(e.type) ||
+      e.type === 'orbital_hub'
+    ) {
       return { ok: false, error: 'unknown_building' };
     }
     if (typeof e.dir !== 'number' || ![0, 1, 2, 3].includes(e.dir)) {
       return { ok: false, error: 'invalid_direction' };
     }
 
+    const bType = e.type as BuildingId;
     const entry: BlueprintEntry = {
       dx: e.dx,
       dy: e.dy,
-      type: e.type as BuildingId,
+      type: bType,
       dir: e.dir as Direction,
     };
 
     if (e.recipeId !== undefined) {
-      if (typeof e.recipeId !== 'string' || (e.recipeId !== 'auto' && !(e.recipeId in RECIPES))) {
+      if (!isProcessorType(bType)) {
+        return { ok: false, error: 'recipe_on_non_processor' };
+      }
+      if (typeof e.recipeId !== 'string' || !isSafeKey(e.recipeId)) {
         return { ok: false, error: 'unknown_recipe' };
+      }
+      if (e.recipeId !== 'auto') {
+        if (!VALID_RECIPE_IDS.has(e.recipeId) || RECIPES[e.recipeId].building !== bType) {
+          return { ok: false, error: 'recipe_building_mismatch' };
+        }
       }
       entry.recipeId = e.recipeId;
     }
@@ -216,7 +276,7 @@ export function decodeBlueprint(
       if (typeof e.clock !== 'number' || !Number.isFinite(e.clock)) {
         return { ok: false, error: 'invalid_clock' };
       }
-      entry.clock = Math.max(0.5, Math.min(2.5, e.clock));
+      entry.clock = Math.max(CLOCK_MIN, Math.min(CLOCK_MAX, e.clock));
     }
 
     entries.push(entry);

@@ -1,4 +1,5 @@
 {
+  "schema_version": 1,
   "techs": [
     {
       "id": "tier_1_logistics",
@@ -28,9 +29,10 @@
       "tier": 3,
       "prerequisites": ["tier_2_metallurgy"],
       "cost": [
-        { "item": "steel_beam", "count": 25 },
-        { "item": "glass_crystal", "count": 20 },
-        { "item": "copper_wire", "count": 40 }
+        { "item": "steel_beam", "count": 35 },
+        { "item": "glass_crystal", "count": 30 },
+        { "item": "copper_wire", "count": 60 },
+        { "item": "concrete", "count": 20 }
       ],
       "unlocks_buildings": ["assembler", "solar_panel", "accumulator"],
       "unlocks_features": ["blueprints"]
@@ -107,16 +109,18 @@
       "requirements": [
         { "item": "silicon_wafer", "count": 40 },
         { "item": "processor", "count": 30 },
-        { "item": "modular_frame", "count": 35 }
+        { "item": "modular_frame", "count": 35 },
+        { "item": "concrete", "count": 80 }
       ]
     },
     {
       "phase": 5,
       "id": "phase_5",
       "requirements": [
-        { "item": "quantum_core", "count": 25 },
-        { "item": "processor", "count": 40 },
-        { "item": "steel_beam", "count": 80 }
+        { "item": "quantum_core", "count": 30 },
+        { "item": "processor", "count": 50 },
+        { "item": "steel_beam", "count": 100 },
+        { "item": "concrete", "count": 100 }
       ]
     }
   ]

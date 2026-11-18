@@ -139,6 +139,7 @@
   "assemble_processor": {
     "id": "assemble_processor",
     "building": "assembler",
+    "required_tech": "tier_4_overclock",
     "inputs": [
       { "item": "circuit", "count": 2 },
       { "item": "silicon_wafer", "count": 1 }
@@ -151,6 +152,7 @@
   "assemble_quantum": {
     "id": "assemble_quantum",
     "building": "assembler",
+    "required_tech": "tier_5_quantum",
     "inputs": [
       { "item": "modular_frame", "count": 1 },
       { "item": "processor", "count": 2 }

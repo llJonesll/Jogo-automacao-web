@@ -1,8 +1,22 @@
-import { ORBITAL_PHASES, TECHS, TICK_HZ, createDefaultConfig } from '../core/data';
+/**
+ * Tech research, orbital cargo phase progression, telemetry rolling windows, and full world tick driver.
+ * Game rules: `design/gdd/factory-systems.md`.
+ * Architecture: `docs/architecture/architecture.md` (zero DOM dependencies).
+ */
+import {
+  BUILDINGS,
+  DEFAULT_CONFIG,
+  ORBITAL_PHASES,
+  TECH_BY_ID,
+  TECHS,
+  TICK_HZ,
+  transitionBuildingStatus,
+} from '../core/data';
 import type {
   BuildingEntity,
   GameConfig,
   ItemId,
+  ItemStack,
   OrbitalPhaseDef,
   SimulationAudioEvent,
   TechDef,
@@ -11,6 +25,9 @@ import type {
 import { stepPower } from './power';
 import { type SimulationHooks, stepSimulation } from './simulation';
 import { TELEMETRY_BUCKETS, consumeResources, hasResources } from './world';
+
+export const ROCKET_TIMER_SEC = 4.5;
+export const LAB_SCIENCE_MULT = 2;
 
 export function recordItemProduced(world: WorldState, item: ItemId, count: number): void {
   const bucket = world.telemetry.buckets[world.telemetry.bucketIndex];
@@ -29,10 +46,13 @@ export function advanceTelemetryTick(world: WorldState): void {
   if (world.telemetry.bucketTick >= TICK_HZ) {
     world.telemetry.bucketTick = 0;
     world.telemetry.bucketIndex = (world.telemetry.bucketIndex + 1) % TELEMETRY_BUCKETS;
-    world.telemetry.buckets[world.telemetry.bucketIndex] = {
-      produced: {},
-      consumed: {},
-    };
+    const bucket = world.telemetry.buckets[world.telemetry.bucketIndex];
+    for (const k in bucket.produced) {
+      bucket.produced[k as ItemId] = 0;
+    }
+    for (const k in bucket.consumed) {
+      bucket.consumed[k as ItemId] = 0;
+    }
   }
 }
 
@@ -42,15 +62,19 @@ export function getRollingRates(world: WorldState): {
 } {
   const producedPerMin: Partial<Record<ItemId, number>> = {};
   const consumedPerMin: Partial<Record<ItemId, number>> = {};
+  const buckets = world.telemetry.buckets;
 
-  for (const bucket of world.telemetry.buckets) {
-    for (const [k, v] of Object.entries(bucket.produced)) {
+  for (let i = 0; i < buckets.length; i++) {
+    const bucket = buckets[i];
+    for (const k in bucket.produced) {
+      const v = bucket.produced[k as ItemId];
       if (v) {
         const item = k as ItemId;
         producedPerMin[item] = (producedPerMin[item] ?? 0) + v;
       }
     }
-    for (const [k, v] of Object.entries(bucket.consumed)) {
+    for (const k in bucket.consumed) {
+      const v = bucket.consumed[k as ItemId];
       if (v) {
         const item = k as ItemId;
         consumedPerMin[item] = (consumedPerMin[item] ?? 0) + v;
@@ -63,14 +87,21 @@ export function getRollingRates(world: WorldState): {
 
 export function getTechById(id: string | null): TechDef | null {
   if (!id) return null;
-  return TECHS.find((t) => t.id === id) ?? null;
+  return TECH_BY_ID[id] ?? null;
+}
+
+function arePrereqsUnlocked(world: WorldState, prereqs: readonly string[]): boolean {
+  for (let i = 0; i < prereqs.length; i++) {
+    if (!world.unlockedTechs.includes(prereqs[i])) return false;
+  }
+  return true;
 }
 
 export function canStartTech(world: WorldState, techId: string): boolean {
   const tech = getTechById(techId);
   if (!tech) return false;
   if (world.unlockedTechs.includes(techId)) return false;
-  return tech.prerequisites.every((pre) => world.unlockedTechs.includes(pre));
+  return arePrereqsUnlocked(world, tech.prerequisites);
 }
 
 function finalizeTechUnlock(
@@ -82,12 +113,18 @@ function finalizeTechUnlock(
     world.unlockedTechs.push(tech.id);
   }
   events.push({ kind: 'tech' });
-  const next = TECHS.find(
-    (t) =>
-      !world.unlockedTechs.includes(t.id) &&
-      t.prerequisites.every((p) => world.unlockedTechs.includes(p))
-  );
-  world.activeTechId = next ? next.id : null;
+  let nextId: string | null = null;
+  for (let i = 0; i < TECHS.length; i++) {
+    const candidate = TECHS[i];
+    if (
+      !world.unlockedTechs.includes(candidate.id) &&
+      arePrereqsUnlocked(world, candidate.prerequisites)
+    ) {
+      nextId = candidate.id;
+      break;
+    }
+  }
+  world.activeTechId = nextId;
 }
 
 export function unlockTechFromStockpile(
@@ -98,16 +135,17 @@ export function unlockTechFromStockpile(
   if (!canStartTech(world, techId)) return false;
   const tech = getTechById(techId)!;
   const prog = world.techProgress[techId] ?? {};
-  const remaining = tech.cost
-    .map((c) => ({
-      item: c.item,
-      count: Math.max(0, c.count - (prog[c.item] ?? 0)),
-    }))
-    .filter((c) => c.count > 0);
+  const remaining: ItemStack[] = [];
+  for (let i = 0; i < tech.cost.length; i++) {
+    const c = tech.cost[i];
+    const missing = Math.max(0, c.count - (prog[c.item] ?? 0));
+    if (missing > 0) remaining.push({ item: c.item, count: missing });
+  }
 
   if (!hasResources(world, remaining)) return false;
   consumeResources(world, remaining);
-  for (const req of tech.cost) {
+  for (let i = 0; i < tech.cost.length; i++) {
+    const req = tech.cost[i];
     prog[req.item] = req.count;
   }
   world.techProgress[techId] = prog;
@@ -115,46 +153,69 @@ export function unlockTechFromStockpile(
   return true;
 }
 
+/**
+ * Advances a Research Lab consuming needed active-tech items at 2x science efficiency.
+ */
 export function stepResearchLab(
   world: WorldState,
   lab: BuildingEntity,
   satisfaction: number,
   dt: number,
-  events: SimulationAudioEvent[]
+  events: SimulationAudioEvent[],
+  config: GameConfig = DEFAULT_CONFIG
 ): void {
   const tech = getTechById(world.activeTechId);
   if (!tech || !canStartTech(world, tech.id)) {
-    lab.status = 'idle';
+    transitionBuildingStatus(lab, 'idle');
     return;
   }
   if (satisfaction <= 0.01) {
-    lab.status = 'no_power';
+    transitionBuildingStatus(lab, 'no_power');
     return;
   }
 
-  const prog = (world.techProgress[tech.id] ??= {});
-  const needed = tech.cost.find(
-    (c) => (prog[c.item] ?? 0) < c.count && (lab.inputBuffer[c.item] ?? 0) >= 1
-  );
+  let prog = world.techProgress[tech.id];
+  if (!prog) {
+    prog = {};
+    world.techProgress[tech.id] = prog;
+  }
+
+  let needed: ItemStack | null = null;
+  for (let i = 0; i < tech.cost.length; i++) {
+    const c = tech.cost[i];
+    if ((prog[c.item] ?? 0) < c.count && (lab.inputBuffer[c.item] ?? 0) >= 1) {
+      needed = c;
+      break;
+    }
+  }
 
   if (!needed) {
-    lab.status = 'input_starved';
+    transitionBuildingStatus(lab, 'input_starved');
     return;
   }
 
-  lab.craftProgress += 2.0 * lab.clock * satisfaction * dt;
-  lab.status = 'working';
+  const labSpeed = BUILDINGS.research_lab.speed ?? 2.0;
+  const rate =
+    labSpeed * (1 + lab.geoBonus) * config.craft_speed_mult.value * lab.clock * satisfaction;
+  lab.craftProgress += rate * dt;
+  transitionBuildingStatus(lab, 'working');
 
   if (lab.craftProgress >= 1.0) {
     lab.craftProgress -= 1.0;
-    lab.inputBuffer[needed.item] = (lab.inputBuffer[needed.item] ?? 0) - 1;
-    if (lab.inputBuffer[needed.item] === 0) delete lab.inputBuffer[needed.item];
+    lab.inputBuffer[needed.item] = Math.max(0, (lab.inputBuffer[needed.item] ?? 0) - 1);
     recordItemConsumed(world, needed.item, 1);
 
     // Research Labs grant 2x science efficiency per item
-    prog[needed.item] = Math.min(needed.count, (prog[needed.item] ?? 0) + 2);
+    prog[needed.item] = Math.min(needed.count, (prog[needed.item] ?? 0) + LAB_SCIENCE_MULT);
 
-    const complete = tech.cost.every((c) => (prog[c.item] ?? 0) >= c.count);
+    let complete = true;
+    for (let i = 0; i < tech.cost.length; i++) {
+      const c = tech.cost[i];
+      if ((prog[c.item] ?? 0) < c.count) {
+        complete = false;
+        break;
+      }
+    }
     if (complete) {
       finalizeTechUnlock(world, tech, events);
     }
@@ -168,13 +229,13 @@ export function getActiveOrbitalPhase(world: WorldState): OrbitalPhaseDef | null
 function checkPhaseCompletion(world: WorldState, events: SimulationAudioEvent[]): void {
   const phase = getActiveOrbitalPhase(world);
   if (!phase) return;
-  const done = phase.requirements.every(
-    (req) => (world.phaseDelivered[req.item] ?? 0) >= req.count
-  );
-  if (!done) return;
+  for (let i = 0; i < phase.requirements.length; i++) {
+    const req = phase.requirements[i];
+    if ((world.phaseDelivered[req.item] ?? 0) < req.count) return;
+  }
 
   world.orbitalLaunches += 1;
-  world.rocketTimer = 4.5;
+  world.rocketTimer = ROCKET_TIMER_SEC;
   world.phaseIndex += 1;
   world.phaseDelivered = {};
   events.push({ kind: 'launch' });
@@ -191,7 +252,13 @@ export function handleHubDelivery(
 ): void {
   const phase = getActiveOrbitalPhase(world);
   if (!phase) return;
-  const req = phase.requirements.find((r) => r.item === item);
+  let req: ItemStack | null = null;
+  for (let i = 0; i < phase.requirements.length; i++) {
+    if (phase.requirements[i].item === item) {
+      req = phase.requirements[i];
+      break;
+    }
+  }
   if (!req) return;
 
   const delivered = world.phaseDelivered[item] ?? 0;
@@ -210,7 +277,8 @@ export function loadPhaseFromStockpile(
   if (!phase) return 0;
 
   let loaded = 0;
-  for (const req of phase.requirements) {
+  for (let i = 0; i < phase.requirements.length; i++) {
+    const req = phase.requirements[i];
     const cur = world.phaseDelivered[req.item] ?? 0;
     const missing = Math.max(0, req.count - cur);
     const avail = world.stockpile[req.item] ?? 0;
@@ -236,9 +304,13 @@ export const FULL_SIM_HOOKS: SimulationHooks = {
   onTickEnd: advanceTelemetryTick,
 };
 
+/**
+ * Advances the complete simulation (power, logistics, extraction, crafting, labs, telemetry) by 1 tick.
+ * @example const events = tickWorld(world, config);
+ */
 export function tickWorld(
   world: WorldState,
-  config: GameConfig = createDefaultConfig()
+  config: GameConfig = DEFAULT_CONFIG
 ): SimulationAudioEvent[] {
   return stepSimulation(world, config, FULL_SIM_HOOKS);
 }
